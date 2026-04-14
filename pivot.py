@@ -230,7 +230,7 @@ elif st.session_state["authentication_status"]:
             f"✅ **{st.session_state.source_name}** — "
             f"{len(df):,}행 × {len(df.columns)}열"
         )
-        st.dataframe(df.head(5), use_container_width=True)
+        st.dataframe(df.head(5), width='stretch')
 
         # 컬럼 상세 정보
         with st.expander("🔍 컬럼 상세 정보 보기"):
@@ -240,7 +240,7 @@ elif st.session_state["authentication_status"]:
                 'NULL 수': df.isnull().sum(),
                 'NULL 비율(%)': (df.isnull().sum() / len(df) * 100).round(1)
             })
-            st.dataframe(col_info, use_container_width=True)
+            st.dataframe(col_info, width='stretch')
 
         # ================================================================
         # Step 2. 펼치기 설정
@@ -286,7 +286,7 @@ elif st.session_state["authentication_status"]:
                 })
             st.dataframe(
                 pd.DataFrame(analysis_data),
-                use_container_width=True, hide_index=True
+                width='stretch', hide_index=True
             )
             st.caption(
                 "💡 고유값이 적은(반복 많은) 컬럼 → **기준 컬럼** | "
@@ -503,7 +503,7 @@ elif st.session_state["authentication_status"]:
                             f"전체 {total_groups:,}건)"
                         )
                         st.dataframe(
-                            preview_result, use_container_width=True
+                            preview_result, width='stretch'
                         )
 
                         # --- C-2: 원본 ↔ 결과 비교 ---
@@ -527,14 +527,14 @@ elif st.session_state["authentication_status"]:
                                 ]
                                 st.dataframe(
                                     sample_df[orig_mask][display_cols],
-                                    use_container_width=True,
+                                    width='stretch',
                                     hide_index=True
                                 )
                             with cmp2:
                                 st.markdown("**📊 결과 (가로로 펼침)**")
                                 st.dataframe(
                                     preview_result.head(1),
-                                    use_container_width=True
+                                    width='stretch'
                                 )
 
                         # --- 전체 실행 ---
@@ -613,12 +613,12 @@ elif st.session_state["authentication_status"]:
                                 )
                                 st.dataframe(
                                     final_df.head(MAX_DISPLAY),
-                                    use_container_width=True
+                                    width='stretch'
                                 )
                             else:
                                 st.dataframe(
                                     final_df,
-                                    use_container_width=True
+                                    width='stretch'
                                 )
 
                             # --- 요약 통계 (일반 피벗) ---
