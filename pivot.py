@@ -105,6 +105,11 @@ elif st.session_state["authentication_status"]:
         'auto_analyzed': False,   # 자동분석 완료 여부
         'export_buffer': [],      # 전체 내보내기용
         'result_section': None,
+        # 데이터 설정
+        'patient_id_col': None,        # 환자 ID 컬럼
+        'dependent_var_col': None,     # 종속변수 컬럼
+        'dep_var_as_cat': False,       # 종속변수를 범주형으로 변환 여부
+        'data_configured': False,      # 데이터 설정 완료 여부
         # 피벗 위자드 상태
         'pivot_mode': None,
         'pivot_index_cols': [],
@@ -185,6 +190,10 @@ elif st.session_state["authentication_status"]:
             st.session_state._excel_buffer = None
             st.session_state.auto_analyzed = False
             st.session_state.chat_history = []
+            st.session_state.patient_id_col = None
+            st.session_state.dependent_var_col = None
+            st.session_state.dep_var_as_cat = False
+            st.session_state.data_configured = False
             reset_tree()
         except Exception as e:
             st.error(f"파일 오류: {e}")
@@ -204,6 +213,52 @@ elif st.session_state["authentication_status"]:
             c1, c2 = st.columns(2)
             c1.metric("행", f"{len(df):,}")
             c2.metric("열", f"{len(df.columns):,}")
+            st.divider()
+
+            # ── 데이터 설정 (환자 ID · 종속변수) ──────────────────
+            with st.expander("⚙️ 데이터 설정", expanded=not st.session_state.data_configured):
+                all_cols = [""] + df.columns.tolist()
+
+                # 환자 ID
+                pid_idx = all_cols.index(st.session_state.patient_id_col) if st.session_state.patient_id_col in all_cols else 0
+                pid = st.selectbox("🆔 환자 ID 컬럼", all_cols, index=pid_idx,
+                                   help="분석에서 개인 식별자로 사용할 컬럼", key="sb_pid")
+                st.session_state.patient_id_col = pid if pid else None
+
+                # 종속변수
+                dep_idx = all_cols.index(st.session_state.dependent_var_col) if st.session_state.dependent_var_col in all_cols else 0
+                dep = st.selectbox("🎯 종속변수 컬럼", all_cols, index=dep_idx,
+                                   help="분석의 목표(결과) 변수", key="sb_dep")
+                st.session_state.dependent_var_col = dep if dep else None
+
+                # 종속변수가 수치형이면 범주형 변환 옵션
+                if dep and dep in df.columns and pd.api.types.is_numeric_dtype(df[dep]):
+                    unique_n = df[dep].nunique()
+                    st.caption(f"ℹ️ **{dep}**는 수치형 (고유값 {unique_n}개)")
+                    convert = st.checkbox(
+                        f"🔄 '{dep}'을 범주형으로 변환",
+                        value=st.session_state.dep_var_as_cat,
+                        key="cb_dep_cat",
+                        help=f"0/1 코드 등 실제로는 범주인 경우 체크"
+                    )
+                    st.session_state.dep_var_as_cat = convert
+                    if convert and df[dep].dtype != "object":
+                        st.session_state.df[dep] = st.session_state.df[dep].astype(str)
+                        st.caption("✅ 범주형으로 변환됨")
+                    elif not convert and df[dep].dtype == "object":
+                        try:
+                            st.session_state.df[dep] = pd.to_numeric(st.session_state.df[dep])
+                            st.caption("✅ 수치형으로 복원됨")
+                        except ValueError:
+                            pass
+                elif dep and dep in df.columns:
+                    st.caption(f"ℹ️ **{dep}**는 범주형 (고유값 {df[dep].nunique()}개)")
+                    st.session_state.dep_var_as_cat = False
+
+                if st.button("✅ 설정 완료", type="primary", use_container_width=True, key="btn_config_done"):
+                    st.session_state.data_configured = True
+                    st.rerun()
+
         st.divider()
 
         # 빠른 분석 버튼 (데이터 로드 후)
