@@ -1,43 +1,20 @@
 import streamlit as st
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
-import io
-import re
+import io, re
 from datetime import datetime
 import traceback
 import streamlit_authenticator as stauth
-
+import stats_functions as sf
 
 # =============================================================================
-# 핵심 로직: 1:N 펼치기 / 일반 피벗 수행 함수
+# 핵심 로직: perform_pivot (변경 없음)
 # =============================================================================
 def perform_pivot(source_df, index_cols, values_col, agg_func='first',
                   max_n=None, sort_by_seq=False, custom_prefix=None,
                   classic_mode=False, columns_col=None):
-    """
-    데이터를 피벗/펼치기 처리하는 핵심 함수.
-
-    Args:
-        source_df: 원본 DataFrame
-        index_cols: 기준(행) 컬럼 리스트
-        values_col: 값 컬럼 리스트
-        agg_func: 집계 함수
-        max_n: 1:N 펼치기 시 최대 N 값
-        sort_by_seq: True면 순번별 정렬 (진단_1, 약품_1, 진단_2, 약품_2...)
-        custom_prefix: 컬럼 접두어 딕셔너리 {원본명: 접두어}
-        classic_mode: True면 일반 피벗 모드
-        columns_col: 일반 피벗 시 열(Columns) 컬럼
-
-    Returns:
-        피벗 결과 DataFrame
-    """
-    # 필요한 컬럼만 복사 (메모리 최적화)
-    needed_cols = list(set(
-        index_cols + values_col + ([columns_col] if columns_col else [])
-    ))
+    needed_cols = list(set(index_cols + values_col + ([columns_col] if columns_col else [])))
     temp_df = source_df[needed_cols].copy()
-
-    # --- NULL 처리 및 데이터 타입 통일 ---
     for col in index_cols:
         if temp_df[col].dtype == 'object':
             temp_df[col] = temp_df[col].fillna("(NULL)").astype(str)
@@ -45,9 +22,7 @@ def perform_pivot(source_df, index_cols, values_col, agg_func='first',
             temp_df[col] = temp_df[col].dt.strftime('%Y-%m-%d').fillna("(NULL)").astype(str)
         else:
             temp_df[col] = temp_df[col].astype(str).replace('nan', '(NULL)')
-
     if classic_mode:
-        # --- 일반 피벗 모드 ---
         fill_val = 0
         if columns_col:
             if temp_df[columns_col].dtype == 'object':
@@ -58,91 +33,60 @@ def perform_pivot(source_df, index_cols, values_col, agg_func='first',
                 temp_df[columns_col] = temp_df[columns_col].astype(str).replace('nan', '(NULL)')
         pivot_col_target = columns_col
     else:
-        # --- 1:N 펼치기 모드 ---
         fill_val = "-"
-        # Values 컬럼 날짜 타입 처리
         for val_c in values_col:
             if is_datetime64_any_dtype(temp_df[val_c]):
                 temp_df[val_c] = temp_df[val_c].dt.strftime('%Y-%m-%d %H:%M:%S').fillna("(NULL)").astype(str)
-
-        # 순번 생성
         temp_df['__seq__'] = temp_df.groupby(index_cols).cumcount() + 1
-
-        # 최대 N 제한
         if max_n is not None:
             temp_df = temp_df[temp_df['__seq__'] <= max_n]
-
         pivot_col_target = '__seq__'
-
-    # --- 피벗 테이블 생성 ---
-    pivot_df = temp_df.pivot_table(
-        index=index_cols,
-        columns=pivot_col_target,
-        values=values_col,
-        aggfunc=agg_func,
-        fill_value=fill_val
-    )
-
-    # --- MultiIndex 컬럼 평탄화 ---
+    pivot_df = temp_df.pivot_table(index=index_cols, columns=pivot_col_target,
+                                    values=values_col, aggfunc=agg_func, fill_value=fill_val)
     prefix_map = custom_prefix or {v: v for v in values_col}
-
     if isinstance(pivot_df.columns, pd.MultiIndex):
-        pivot_df.columns = [
-            f"{prefix_map.get(col[0], col[0])}_{col[1]}"
-            for col in pivot_df.columns
-        ]
+        pivot_df.columns = [f"{prefix_map.get(col[0], col[0])}_{col[1]}" for col in pivot_df.columns]
     else:
         if not classic_mode:
             val_name = values_col[0]
             prefix = prefix_map.get(val_name, val_name)
             pivot_df.columns = [f"{prefix}_{col}" for col in pivot_df.columns]
-
-    # --- 순번별 정렬 (요청 시) ---
     if sort_by_seq and not classic_mode and len(values_col) > 1:
         def col_sort_key(col_name):
             match = re.search(r'_(\d+)$', col_name)
             seq = int(match.group(1)) if match else 0
             return (seq, col_name)
         pivot_df = pivot_df[sorted(pivot_df.columns, key=col_sort_key)]
-
-    # --- 원본 순서 유지 (Left Merge) ---
     pivot_df_reset = pivot_df.reset_index()
     unique_indices = temp_df[index_cols].drop_duplicates()
-
     final_df = pd.merge(unique_indices, pivot_df_reset, on=index_cols, how='left')
-    final_df = final_df.fillna(fill_val)
-    final_df = final_df.set_index(index_cols)
-
+    final_df = final_df.fillna(fill_val).set_index(index_cols)
     return final_df
 
 
 # =============================================================================
-# 1. 페이지 설정 (가장 먼저 와야 함)
+# 페이지 설정
 # =============================================================================
-st.set_page_config(page_title="데이터 펼치기 도구", layout="wide")
-
+st.set_page_config(page_title="KUH 분석 플랫폼", layout="wide", page_icon="🏥")
 
 # =============================================================================
-# 2. 인증 (Authentication)
+# 인증
 # =============================================================================
 try:
     config = st.secrets.to_dict()
     credentials = config['credentials']
     cookie_settings = config['cookie']
 except FileNotFoundError:
-    st.error("❌ .streamlit/secrets.toml 파일이 없습니다. 설정을 확인해주세요.")
+    st.error("❌ .streamlit/secrets.toml 파일이 없습니다.")
     st.stop()
 except KeyError:
-    st.error("❌ secrets.toml 형식 오류. [credentials]와 [cookie] 섹션을 확인하세요.")
+    st.error("❌ secrets.toml 형식 오류.")
     st.stop()
 
 authenticator = stauth.Authenticate(
-    credentials,
-    cookie_settings['name'],
-    cookie_settings['key'],
-    cookie_settings['expiry_days']
+    credentials, cookie_settings['name'],
+    cookie_settings['key'], cookie_settings['expiry_days']
 )
-
 authenticator.login(location='main')
 
 if st.session_state["authentication_status"] is False:
@@ -150,558 +94,944 @@ if st.session_state["authentication_status"] is False:
 elif st.session_state["authentication_status"] is None:
     st.warning('🔒 로그인이 필요합니다.')
 elif st.session_state["authentication_status"]:
-    # ================================================================
-    # 로그인 성공 → 메인 애플리케이션
-    # ================================================================
 
-    # --- 세션 상태 초기화 ---
-    for key, default in {
+    # ── 세션 상태 초기화 ──────────────────────────────────────────
+    _defaults = {
         'df': None, 'source_name': '', 'loaded_file_key': None,
-        '_pivot_key': None, '_pivot_result': None, '_excel_buffer': None
-    }.items():
-        if key not in st.session_state:
-            st.session_state[key] = default
+        '_pivot_key': None, '_pivot_result': None, '_excel_buffer': None,
+        'chat_history': [],       # 통합 대화 기록
+        'tree_path': [],          # 트리 경로 e.g. ["basic","distribution"]
+        'tree_step': 0,           # 현재 레벨
+        'auto_analyzed': False,   # 자동분석 완료 여부
+        'export_buffer': [],      # 전체 내보내기용
+        'result_section': None,
+        # 피벗 위자드 상태
+        'pivot_mode': None,
+        'pivot_index_cols': [],
+        'pivot_values_col': [],
+        'pivot_columns_col': None,
+        'pivot_agg_func': 'first',
+        'pivot_max_n': None,
+        'pivot_sort_by_seq': False,
+        'pivot_custom_prefix': {},
+        'pivot_classic_mode': False,
+        # 분석 파라미터 (레벨3 위젯 상태)
+        'pending_intent': None,
+        'pending_col': None,
+        'pending_group': None,
+    }
+    for k, v in _defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
-    # --- 사이드바: 로그아웃 + 데이터 현황 ---
+    # ── 헬퍼 함수 ─────────────────────────────────────────────────
+    def add_user_msg(txt):
+        st.session_state.chat_history.append({"role": "user", "content": txt})
+
+    def add_bot_msg(txt, figure=None, result_df=None, export_data=None, nav=True):
+        st.session_state.chat_history.append({
+            "role": "assistant", "content": txt,
+            "figure": figure, "result_df": result_df,
+            "export_data": export_data, "nav": nav,
+        })
+
+    def go_to(path, user_msg, bot_msg):
+        add_user_msg(user_msg)
+        add_bot_msg(bot_msg, nav=False)
+        st.session_state.tree_path = path
+        st.session_state.tree_step = len(path)
+        st.rerun()
+
+    def reset_tree():
+        """완전 초기화 (Level 0)"""
+        st.session_state.tree_path = []
+        st.session_state.tree_step = 0
+        st.session_state.result_section = None
+        st.session_state.pending_intent = None
+        st.session_state.pending_col = None
+        st.session_state.pending_group = None
+
+    def go_back_to_section(section: str):
+        """분석 완료 후 해당 섹션의 Level 1로 복귀"""
+        st.session_state.tree_path = [section]
+        st.session_state.tree_step = 1
+        st.session_state.result_section = section
+        st.session_state.pending_intent = None
+        st.session_state.pending_col = None
+        st.session_state.pending_group = None
+
+    def ts():
+        return datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    # ── 파일 로드 함수 ────────────────────────────────────────────
+    def load_file(uploaded_file):
+        file_key = f"{uploaded_file.name}_{uploaded_file.size}"
+        if st.session_state.loaded_file_key == file_key:
+            return
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                try:
+                    df_temp = pd.read_csv(uploaded_file, encoding='utf-8')
+                except UnicodeDecodeError:
+                    uploaded_file.seek(0)
+                    df_temp = pd.read_csv(uploaded_file, encoding='cp949')
+            else:
+                df_temp = pd.read_excel(uploaded_file, engine='calamine')
+            st.session_state.df = df_temp
+            st.session_state.source_name = uploaded_file.name
+            st.session_state.loaded_file_key = file_key
+            st.session_state._pivot_key = None
+            st.session_state._pivot_result = None
+            st.session_state._excel_buffer = None
+            st.session_state.auto_analyzed = False
+            st.session_state.chat_history = []
+            reset_tree()
+        except Exception as e:
+            st.error(f"파일 오류: {e}")
+
+    # ── 사이드바 ──────────────────────────────────────────────────
     with st.sidebar:
-        st.write(f"👤 **{st.session_state['name']}**님")
-        authenticator.logout('로그아웃', 'sidebar')
+        st.markdown("## 🏥 KUH 분석 플랫폼")
         st.divider()
 
+        uploaded = st.file_uploader("📁 데이터 파일 업로드", type=['csv', 'xlsx'])
+        if uploaded:
+            load_file(uploaded)
+
         if st.session_state.df is not None:
-            _sb_df = st.session_state.df
-            st.subheader("📋 데이터 현황")
+            df = st.session_state.df
             st.caption(f"📂 {st.session_state.source_name}")
-            sc1, sc2 = st.columns(2)
-            sc1.metric("행", f"{len(_sb_df):,}")
-            sc2.metric("열", f"{len(_sb_df.columns):,}")
+            c1, c2 = st.columns(2)
+            c1.metric("행", f"{len(df):,}")
+            c2.metric("열", f"{len(df.columns):,}")
+        st.divider()
 
-            num_c = len(_sb_df.select_dtypes(include=['int64', 'float64']).columns)
-            str_c = len(_sb_df.select_dtypes(include=['object']).columns)
-            date_c = sum(1 for c in _sb_df.columns if is_datetime64_any_dtype(_sb_df[c]))
-            st.caption(f"숫자 {num_c}개 · 문자 {str_c}개 · 날짜 {date_c}개")
-        else:
-            st.info("파일을 업로드하면\n여기에 정보가 표시됩니다.")
+        # 빠른 분석 버튼 (데이터 로드 후)
+        if st.session_state.df is not None:
+            st.caption("⚡ 빠른 분석")
+            quick_map = {
+                "📊 분포 확인": ("basic", "distribution"),
+                "🔗 상관관계": ("basic", "correlation"),
+                "❓ 결측/요약": ("basic", "missing"),
+                "⚖️ 두 그룹 비교": ("stats", "ttest"),
+                "📊 여러 그룹 비교": ("stats", "anova"),
+                "📈 회귀분석": ("stats", "regression"),
+                "📐 데이터 펼치기": ("pivot", "1n"),
+            }
+            for label, (p1, p2) in quick_map.items():
+                if st.button(label, use_container_width=True, key=f"quick_{p2}"):
+                    path = [p1, p2]
+                    st.session_state.tree_path = path
+                    st.session_state.tree_step = len(path)
+                    st.rerun()
+            st.divider()
 
-    # --- 메인 타이틀 ---
-    st.title("📊 데이터 펼치기 도구")
-    st.caption("1:N 관계의 데이터를 가로로 펼쳐서 보기 쉽게 정리합니다.")
-
-    # ================================================================
-    # Step 1. 데이터 업로드
-    # ================================================================
-    st.markdown("---")
-    st.markdown("## 📁 Step 1. 데이터 업로드")
-
-    uploaded_file = st.file_uploader(
-        "CSV 또는 Excel 파일을 업로드하세요",
-        type=['csv', 'xlsx'],
-        help="UTF-8/CP949 인코딩의 CSV, Excel(.xlsx) 파일을 지원합니다."
-    )
-
-    if uploaded_file is not None:
-        file_key = f"{uploaded_file.name}_{uploaded_file.size}"
-        if st.session_state.loaded_file_key != file_key:
-            try:
-                if uploaded_file.name.endswith('.csv'):
-                    try:
-                        df_temp = pd.read_csv(uploaded_file, encoding='utf-8')
-                    except UnicodeDecodeError:
-                        uploaded_file.seek(0)
-                        df_temp = pd.read_csv(uploaded_file, encoding='cp949')
-                else:
-                    df_temp = pd.read_excel(uploaded_file, engine='calamine')
-
-                st.session_state.df = df_temp
-                st.session_state.source_name = uploaded_file.name
-                st.session_state.loaded_file_key = file_key
-                # 새 파일 → 이전 피벗 결과 초기화
-                st.session_state._pivot_key = None
-                st.session_state._pivot_result = None
-                st.session_state._excel_buffer = None
-            except Exception as e:
-                st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
-
-    # --- 데이터 미리보기 ---
-    if st.session_state.df is not None:
-        df = st.session_state.df
-
-        st.success(
-            f"✅ **{st.session_state.source_name}** — "
-            f"{len(df):,}행 × {len(df.columns)}열"
-        )
-        st.dataframe(df.head(5), width='stretch')
-
-        # 컬럼 상세 정보
-        with st.expander("🔍 컬럼 상세 정보 보기"):
-            col_info = pd.DataFrame({
-                '데이터 타입': df.dtypes.astype(str),
-                '고유값 수': df.nunique(),
-                'NULL 수': df.isnull().sum(),
-                'NULL 비율(%)': (df.isnull().sum() / len(df) * 100).round(1)
-            })
-            st.dataframe(col_info, width='stretch')
-
-        # ================================================================
-        # Step 2. 펼치기 설정
-        # ================================================================
-        st.markdown("---")
-        st.markdown("## ⚙️ Step 2. 펼치기 설정")
-
-        all_columns = df.columns.tolist()
-        numeric_columns = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
-
-        # --- 모드 선택 ---
-        pivot_mode = st.radio(
-            "모드 선택",
-            ["📊 1:N 데이터 펼치기", "📈 일반 집계 피벗 (sum, count 등)"],
-            horizontal=True,
-            help="1:N 펼치기: 상세 데이터를 가로로 나열 | 일반 피벗: 수치 데이터 집계"
-        )
-        classic_mode = pivot_mode.startswith("📈")
-
-        if not classic_mode:
-            st.info("💡 **1:N 펼치기 모드**: 기준 컬럼으로 묶은 뒤, 상세 데이터를 가로로 나열합니다.")
-        else:
-            st.info("💡 **일반 피벗 모드**: Excel 피벗 테이블처럼 수치 데이터를 집계합니다.")
-
-        # --- B-1: 1:N 관계 자동 분석 ---
-        with st.expander("💡 어떤 컬럼을 기준으로 잡아야 할지 모르겠다면?"):
-            analysis_data = []
-            for col in all_columns:
-                unique_count = df[col].nunique()
-                ratio = unique_count / len(df) if len(df) > 0 else 0
-                if ratio < 0.3:
-                    role = "📌 기준 컬럼 후보 (값이 반복됨)"
-                elif ratio > 0.8:
-                    role = "📋 펼칠 데이터 후보 (값이 다양함)"
-                else:
-                    role = "— 어느 쪽이든 활용 가능"
-                analysis_data.append({
-                    '컬럼명': col,
-                    '고유값 수': f"{unique_count:,}",
-                    '전체 행': f"{len(df):,}",
-                    '유일 비율': f"{ratio:.1%}",
-                    '추천': role
-                })
-            st.dataframe(
-                pd.DataFrame(analysis_data),
-                width='stretch', hide_index=True
+        # 전체 결과 내보내기
+        if st.session_state.export_buffer:
+            excel_all = sf.export_to_excel(st.session_state.export_buffer)
+            st.download_button(
+                "📋 전체 분석 Excel 저장",
+                data=excel_all,
+                file_name=f"전체분석_{ts()}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
             )
-            st.caption(
-                "💡 고유값이 적은(반복 많은) 컬럼 → **기준 컬럼** | "
-                "고유값이 다양한 컬럼 → **펼칠 데이터**"
+            st.divider()
+
+        st.write(f"👤 **{st.session_state['name']}**님")
+        authenticator.logout('🚪 로그아웃', 'sidebar')
+
+    # ── 메인 영역 ─────────────────────────────────────────────────
+    df = st.session_state.df
+
+    # 파일 미업로드 시 챗봇 웰컴 메시지 (1회)
+    if df is None and not st.session_state.chat_history:
+        with st.chat_message("assistant"):
+            st.markdown(
+                "안녕하세요! 👋 저는 **KUH 데이터 분석 어시스턴트**예요.\n\n"
+                "데이터를 업로드하면 아래 기능들을 사용할 수 있어요:\n"
+                "- 📊 **데이터 탐색** — 분포, 상관관계, 결측값 확인\n"
+                "- 🔬 **통계 검정** — 그룹 비교(t검정·ANOVA), 회귀분석\n"
+                "- 📐 **데이터 펼치기** — 1:N 구조를 가로로 정리\n\n"
+                "💡 **왼쪽 사이드바**에서 CSV 또는 Excel 파일을 업로드해주세요!\n"
+                "업로드하면 자동으로 데이터를 분석하고 안내해드릴게요 😊"
             )
 
-        # --- Step 2-1: 기준 컬럼 ---
-        st.markdown("### 2-1️⃣ 기준 컬럼을 선택하세요")
-        index_cols = st.multiselect(
-            "📌 기준 컬럼",
-            all_columns,
-            help="이 컬럼의 값이 같은 행들이 하나로 묶입니다. 예: 환자ID, 주문번호"
+    # 자동 분석 (파일 업로드 직후 1회)
+    if df is not None and not st.session_state.auto_analyzed:
+        info = sf.auto_analyze(df)
+        missing_txt = ""
+        if info["missing"]:
+            missing_txt = "\n\n   ⚠️ 결측값: " + ", ".join(
+                f"**{c}** {n}개" for c, n in list(info["missing"].items())[:5]
+            )
+        one_n = info["one_n"]
+        one_n_txt = ""
+        if one_n["is_1n"]:
+            top = one_n["candidates"][0]
+            one_n_txt = (
+                f"\n\n   💡 **{top['col']}** 기준으로 1명당 평균 **{top['avg_rows']}행**이 "
+                f"반복되는 구조예요. 데이터 펼치기가 필요할 수 있어요!"
+            )
+        welcome = (
+            f"데이터를 받았어요 😊\n\n"
+            f"   📋 **{st.session_state.source_name}**\n"
+            f"   - 행: **{info['rows']:,}개** / 열: **{info['cols']}개**\n"
+            f"   - 수치형: {', '.join(info['num_cols'][:5]) or '없음'}\n"
+            f"   - 범주형: {', '.join(info['cat_cols'][:5]) or '없음'}"
+            f"{missing_txt}{one_n_txt}\n\n"
+            f"   어떤 걸 해볼까요?"
         )
+        add_bot_msg(welcome, nav=False)
+        st.session_state.auto_analyzed = True
 
-        if index_cols:
-            remaining = [c for c in all_columns if c not in index_cols]
+    # ── 대화 기록 렌더링 ─────────────────────────────────────────
+    for i, msg in enumerate(st.session_state.chat_history):
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg.get("figure"):
+                st.plotly_chart(msg["figure"], use_container_width=True, key=f"chart_{i}")
+            if msg.get("result_df") is not None and not msg["result_df"].empty:
+                st.dataframe(msg["result_df"], use_container_width=True, key=f"df_{i}")
 
-            # --- 기본값 설정 (모든 경로에서 사용) ---
-            columns_col = None
-            values_col = []
-            agg_func = 'first'
-            max_n = None
-            sort_by_seq = False
-            custom_prefix = {}
+            if msg.get("export_data"):
+                ed = msg["export_data"]
+                ec1, ec2, ec3 = st.columns(3)
+                if ed.get("excel"):
+                    ec1.download_button("📥 Excel 다운로드", data=ed["excel"],
+                        file_name=f"결과_{ts()}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key=f"xl_{i}")
+                if ed.get("csv"):
+                    ec2.download_button("📥 CSV 다운로드", data=ed["csv"],
+                        file_name=f"결과_{ts()}.csv", mime="text/csv", key=f"csv_{i}")
+                if ed.get("png"):
+                    ec3.download_button("🖼️ PNG 이미지 저장", data=ed["png"],
+                        file_name=f"차트_{ts()}.png", mime="image/png", key=f"png_{i}")
 
-            if classic_mode:
-                # ========================================
-                # 일반 피벗 모드 UI
-                # ========================================
-                st.markdown("### 2-2️⃣ 열(Columns)과 값(Values)을 선택하세요")
-                pc1, pc2 = st.columns(2)
-                with pc1:
-                    columns_col = st.selectbox(
-                        "📊 열 (가로축이 될 컬럼)",
-                        [None] + remaining,
-                        help="이 컬럼의 고유값이 결과의 열 헤더가 됩니다"
-                    )
-                with pc2:
-                    values_col = st.multiselect(
-                        "📋 값 (집계할 숫자 데이터)",
-                        [c for c in numeric_columns if c not in index_cols],
-                        help="sum, count 등으로 집계할 숫자 컬럼"
-                    )
+    # ── 현재 레벨 위젯 렌더링 ────────────────────────────────────
+    def do_export(fig, result_df, label):
+        """결과 내보내기 데이터 생성"""
+        png = sf.export_chart_png(fig) if fig else b""
+        csv = sf.export_csv(result_df) if result_df is not None else ""
+        excel = sf.export_single_excel(result_df, label[:31]) if result_df is not None else b""
+        ed = {"excel": excel, "csv": csv, "png": png}
+        st.session_state.export_buffer.append({"sheet_name": label, "df": result_df, "fig": fig})
+        return ed
 
-                agg_func = st.selectbox(
-                    "집계 함수",
-                    ['sum', 'mean', 'count', 'min', 'max', 'first'],
-                    help="데이터를 어떻게 요약할지 선택"
-                )
-                max_n = None
-                sort_by_seq = False
-                custom_prefix = {v: v for v in values_col} if values_col else {}
+    def show_nav(back_path=None):
+        """결과 후 네비게이션 버튼 (항상 3개)"""
+        n1, n2, n3 = st.columns(3)
+        if back_path and n1.button("🔁 다시 설정할게", key=f"nav_back_{len(st.session_state.chat_history)}"):
+            st.session_state.tree_path = back_path
+            st.session_state.tree_step = len(back_path)
+            st.rerun()
+        if n2.button("🏠 처음으로 돌아갈게", key=f"nav_home_{len(st.session_state.chat_history)}"):
+            add_user_msg("처음으로 돌아갈게")
+            add_bot_msg("다시 처음부터 시작해볼까요? 어떤 분석을 해볼까요? 😊", nav=False)
+            reset_tree()
+            st.rerun()
+
+    def run_analysis(path):
+        """트리 경로에 따라 분석 실행"""
+        p = path
+        num_cols = df.select_dtypes("number").columns.tolist()
+        cat_cols = df.select_dtypes(["object", "category"]).columns.tolist()
+
+        # ── 기초: 상관관계 (파라미터 없음) ──
+        if p == ["basic", "correlation"]:
+            fig, pairs_df = sf.plot_correlation(df)
+            if fig is None:
+                add_bot_msg("수치형 컬럼이 2개 이상 필요해요!", nav=False)
             else:
-                # ========================================
-                # 1:N 펼치기 모드 UI
-                # ========================================
-                st.markdown("### 2-2️⃣ 옆으로 펼칠 데이터를 선택하세요")
-                values_col = st.multiselect(
-                    "📋 펼칠 데이터",
-                    remaining,
-                    help="이 항목들이 _1, _2, _3... 형태로 옆으로 나열됩니다"
-                )
-                columns_col = None
+                ed = do_export(fig, pairs_df, "상관관계")
+                add_bot_msg("📊 상관관계 분석 결과예요!\n\n아래 히트맵에서 색이 진할수록 관계가 강해요.",
+                            figure=fig, result_df=pairs_df, export_data=ed)
+            go_back_to_section("basic")
 
-                if values_col:
-                    # --- N 분포 분석 ---
-                    n_counts = df.groupby(index_cols).size()
-                    max_n_val = int(n_counts.max())
+        # ── 기초: 결측/요약 (파라미터 없음) ──
+        elif p == ["basic", "missing"]:
+            desc = sf.describe_extended(df)
+            fig, miss_df = sf.plot_missing(df)
+            result = miss_df if not miss_df.empty else desc
+            ed = do_export(fig, result, "결측요약")
+            msg = ("❓ 결측값 현황이에요!" if not miss_df.empty
+                   else "✅ 결측값이 없어요! 아래는 기술통계 요약이에요.")
+            add_bot_msg(msg, figure=fig, result_df=result, export_data=ed)
+            go_back_to_section("basic")
 
-                    st.caption(
-                        f"📊 기준별 상세 데이터 수: "
-                        f"최소 **{n_counts.min()}**건 / "
-                        f"최대 **{max_n_val}**건 / "
-                        f"평균 **{n_counts.mean():.1f}**건"
-                    )
+        # ── 기초: 분포 ── (컬럼 선택 필요 → LEVEL 3에서 처리)
+        elif p[:2] == ["basic", "distribution"] and len(p) == 3:
+            col = p[2]
+            fig, stat = sf.plot_histogram(df, col)
+            stat_df = pd.DataFrame([stat])
+            ed = do_export(fig, stat_df, f"{col}_분포")
+            add_bot_msg(
+                f"📊 **{col}** 분포 분석 결과예요!\n\n"
+                f"평균 **{stat['평균']}** / 중앙값 **{stat['중앙값']}** / "
+                f"표준편차 **{stat['표준편차']}** / 이상치(참고) 있음",
+                figure=fig, result_df=stat_df, export_data=ed,
+            )
+            go_back_to_section("basic")
 
-                    # --- 상세 설정 ---
-                    with st.expander("⚙️ 상세 설정 (선택사항)"):
-                        set_c1, set_c2 = st.columns(2)
+        # ── 기초: 빈도 ──
+        elif p[:2] == ["basic", "frequency"] and len(p) == 3:
+            col = p[2]
+            fig, freq_df = sf.plot_frequency(df, col)
+            ed = do_export(fig, freq_df, f"{col}_빈도")
+            add_bot_msg(f"📂 **{col}** 빈도 분석 결과예요!", figure=fig, result_df=freq_df, export_data=ed)
+            go_back_to_section("basic")
 
-                        with set_c1:
-                            # B-3: 최대 N 제한
-                            if max_n_val > 1:
-                                if max_n_val > 20:
-                                    st.warning(
-                                        f"⚠️ 최대 {max_n_val}건이 가로로 펼쳐집니다. "
-                                        f"너무 많으면 아래에서 제한해주세요."
-                                    )
-                                max_n = st.slider(
-                                    "최대 펼치기 수",
-                                    min_value=1, max_value=max_n_val,
-                                    value=min(20, max_n_val),
-                                    help="기준 하나당 최대 몇 개까지 옆으로 나열할지"
-                                )
-                            else:
-                                max_n = 1
+        # ── 고급: t검정 ──
+        elif p[:2] == ["stats", "ttest"] and len(p) == 4:
+            col, group = p[2], p[3]
+            result, summary, fig = sf.test_ttest(df, col, group)
+            ed = do_export(fig, summary, f"t검정_{col}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"⚖️ **{group}별 {col}** t검정 결과예요!\n\n{result_txt}",
+                        figure=fig, result_df=summary, export_data=ed)
+            go_back_to_section("stats")
 
-                        with set_c2:
-                            # 중복 시 처리 방법
-                            agg_label = st.selectbox(
-                                "중복 시 처리 방법",
-                                ["첫 번째 값 사용", "마지막 값 사용",
-                                 "가장 작은 값", "가장 큰 값"],
-                                help="같은 기준+순번에 값이 여러 개일 때"
+        # ── 고급: ANOVA ──
+        elif p[:2] == ["stats", "anova"] and len(p) == 4:
+            col, group = p[2], p[3]
+            result, summary, tukey_df, fig = sf.test_anova(df, col, group)
+            ed = do_export(fig, summary, f"ANOVA_{col}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"📊 **{group}별 {col}** ANOVA 결과예요!\n\n{result_txt}\n\n📌 Tukey 사후검정:",
+                        figure=fig, result_df=tukey_df, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: 회귀 ──
+        elif p[:2] == ["stats", "regression"] and len(p) >= 4:
+            y_col = p[2]
+            x_cols = p[3:]
+            result, coef_df, fig = sf.run_regression(df, x_cols, y_col)
+            ed = do_export(fig, coef_df, f"회귀_{y_col}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"📈 **{y_col}** 회귀분석 결과예요!\n\n{result_txt}",
+                        figure=fig, result_df=coef_df, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: 정규성 ──
+        elif p[:2] == ["stats", "normality"] and len(p) == 3:
+            col = p[2]
+            result = sf.test_normality(df, col)
+            result_df = pd.DataFrame([result])
+            ed = do_export(None, result_df, f"정규성_{col}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"📐 **{col}** 정규성 검정 결과예요!\n\n{result_txt}",
+                        result_df=result_df, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: 그룹 비교 ──
+        elif p[:2] == ["stats", "group_compare"] and len(p) == 4:
+            col, group = p[2], p[3]
+            summary, fig = sf.compare_groups(df, col, group)
+            ed = do_export(fig, summary, f"그룹비교_{col}")
+            add_bot_msg(f"📋 **{group}별 {col}** 그룹 비교 결과예요!",
+                        figure=fig, result_df=summary, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 기초: 스피어만 상관관계 ──
+        elif p == ["basic", "spearman"]:
+            fig, pairs_df = sf.plot_spearman_correlation(df)
+            if fig is None:
+                add_bot_msg("수치형 컬럼이 2개 이상 필요해요!", nav=False)
+            else:
+                ed = do_export(fig, pairs_df, "스피어만상관")
+                add_bot_msg("🔗 스피어만 상관분석 결과예요!\n\n비선형 관계도 잡아낼 수 있는 분석이에요.",
+                            figure=fig, result_df=pairs_df, export_data=ed)
+            go_back_to_section("basic")
+
+        # ── 기초: 이상치 상세 탐지 ──
+        elif p[:2] == ["basic", "outlier"] and len(p) == 3:
+            col = p[2]
+            fig, summary = sf.detect_outliers_detail(df, col)
+            ed = do_export(fig, summary, f"이상치_{col}")
+            add_bot_msg(f"🔍 **{col}** 이상치 탐지 결과예요!\n\nIQR과 Z-score 두 가지 방법으로 확인했어요.",
+                        figure=fig, result_df=summary, export_data=ed)
+            go_back_to_section("basic")
+
+        # ── 기초: 산점도 행렬 ──
+        elif p == ["basic", "pairplot"]:
+            fig, corr_df = sf.plot_pairplot(df)
+            if fig is None:
+                add_bot_msg("수치형 컬럼이 2개 이상 필요해요!", nav=False)
+            else:
+                ed = do_export(fig, corr_df, "산점도행렬")
+                add_bot_msg("📊 산점도 행렬이에요!\n\n대각선은 각 변수의 분포, 나머지는 변수 간 관계를 보여줘요.",
+                            figure=fig, result_df=corr_df, export_data=ed)
+            go_back_to_section("basic")
+
+        # ── 기초: VIF 다중공선성 ──
+        elif p == ["basic", "vif"]:
+            fig, vif_df = sf.calculate_vif(df)
+            if fig is None:
+                add_bot_msg("수치형 컬럼이 2개 이상 필요해요!", nav=False)
+            else:
+                ed = do_export(fig, vif_df, "다중공선성")
+                add_bot_msg("📐 다중공선성(VIF) 결과예요!\n\nVIF≥10이면 해당 변수를 제거하는 것을 권장해요.",
+                            figure=fig, result_df=vif_df, export_data=ed)
+            go_back_to_section("basic")
+
+        # ── 기초: 바이올린 플롯 ──
+        elif p[:2] == ["basic", "violin"] and len(p) == 4:
+            col, group = p[2], p[3]
+            fig, summary = sf.plot_violin(df, col, group)
+            ed = do_export(fig, summary, f"바이올린_{col}")
+            add_bot_msg(f"🎻 **{group}별 {col}** 바이올린 플롯이에요!\n\n분포 형태와 박스플롯을 동시에 확인할 수 있어요.",
+                        figure=fig, result_df=summary, export_data=ed)
+            go_back_to_section("basic")
+
+        # ── 고급: 카이제곱 검정 ──
+        elif p[:2] == ["stats", "chi2"] and len(p) == 4:
+            col1, col2 = p[2], p[3]
+            result, cross = sf.test_chi2(df, col1, col2)
+            ed = do_export(None, cross, f"카이제곱_{col1}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"🔀 **{col1} × {col2}** 카이제곱 검정 결과예요!\n\n{result_txt}",
+                        result_df=cross, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: 대응표본 t검정 ──
+        elif p[:2] == ["stats", "paired"] and len(p) == 4:
+            col1, col2 = p[2], p[3]
+            result, summary, fig = sf.test_paired_ttest(df, col1, col2)
+            ed = do_export(fig, summary, f"대응t_{col1}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"🔄 **{col1} vs {col2}** 전후 비교 결과예요!\n\n{result_txt}",
+                        figure=fig, result_df=summary, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: Kruskal-Wallis ──
+        elif p[:2] == ["stats", "kruskal"] and len(p) == 4:
+            col, group = p[2], p[3]
+            result, summary, fig = sf.test_kruskal(df, col, group)
+            ed = do_export(fig, summary, f"Kruskal_{col}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"📊 **{group}별 {col}** Kruskal-Wallis 결과예요!\n\n{result_txt}",
+                        figure=fig, result_df=summary, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: 비율 검정 ──
+        elif p[:2] == ["stats", "proportion"] and len(p) == 4:
+            col, group = p[2], p[3]
+            result, summary, fig = sf.test_proportion(df, col, group)
+            ed = do_export(fig, summary, f"비율_{col}")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"📊 **{group}별 {col}** 비율 비교 결과예요!\n\n{result_txt}",
+                        figure=fig, result_df=summary, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: 로지스틱 회귀 ──
+        elif p[:2] == ["stats", "logistic"] and len(p) >= 4:
+            y_col = p[2]
+            x_cols = p[3:]
+            result, coef_df, fig = sf.run_logistic_regression(df, x_cols, y_col)
+            if coef_df is None:
+                add_bot_msg(f"❌ {result.get('오류', '오류 발생')}", nav=False)
+            else:
+                ed = do_export(fig, coef_df, f"로지스틱_{y_col}")
+                result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+                add_bot_msg(f"🎯 **{y_col}** 로지스틱 회귀 결과예요!\n\n{result_txt}",
+                            figure=fig, result_df=coef_df, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: 생존분석 (Kaplan-Meier) ──
+        elif p[:2] == ["stats", "survival"] and len(p) >= 4:
+            time_col, event_col = p[2], p[3]
+            group_col = p[4] if len(p) > 4 else None
+            result, summary_df, fig = sf.run_kaplan_meier(df, time_col, event_col, group_col)
+            ed = do_export(fig, summary_df, "생존분석")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"⏱️ Kaplan-Meier 생존분석 결과예요!\n\n{result_txt}",
+                        figure=fig, result_df=summary_df, export_data=ed)
+            go_back_to_section("stats")
+
+        # ── 고급: Cox 회귀 ──
+        elif p[:2] == ["stats", "cox"] and len(p) >= 5:
+            time_col, event_col = p[2], p[3]
+            x_cols = p[4:]
+            result, coef_df, fig = sf.run_cox_regression(df, time_col, event_col, x_cols)
+            ed = do_export(fig, coef_df, "Cox회귀")
+            result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
+            add_bot_msg(f"📉 Cox 비례위험 모델 결과예요!\n\n{result_txt}",
+                        figure=fig, result_df=coef_df, export_data=ed)
+            go_back_to_section("stats")
+
+    def render_level():
+        path = st.session_state.tree_path
+        step = st.session_state.tree_step
+        df = st.session_state.df
+        num_cols = df.select_dtypes("number").columns.tolist()
+        cat_cols = df.select_dtypes(["object", "category"]).columns.tolist()
+
+        # ── 즉시 실행 경로 (사이드바 빠른 버튼 → 파라미터 없는 분석) ──
+        if step == 2 and path == ["basic", "correlation"]:
+            add_bot_msg("상관관계 분석은 수치형 컬럼들이 서로 얼마나 함께 움직이는지 "
+                        "히트맵으로 보여줘요. 바로 실행할게요! 🔗", nav=False)
+            run_analysis(["basic", "correlation"])
+            st.rerun()
+
+        elif step == 2 and path == ["basic", "missing"]:
+            add_bot_msg("결측값 현황과 기술통계를 한번에 보여드릴게요! ❓", nav=False)
+            run_analysis(["basic", "missing"])
+            st.rerun()
+
+        elif step == 2 and path == ["basic", "spearman"]:
+            add_bot_msg("스피어만 상관분석을 실행할게요! 비선형 관계도 확인할 수 있어요 🔗", nav=False)
+            run_analysis(["basic", "spearman"])
+            st.rerun()
+
+        elif step == 2 and path == ["basic", "pairplot"]:
+            add_bot_msg("산점도 행렬을 그릴게요! 변수 간 관계를 한눈에 볼 수 있어요 📊", nav=False)
+            run_analysis(["basic", "pairplot"])
+            st.rerun()
+
+        elif step == 2 and path == ["basic", "vif"]:
+            add_bot_msg("다중공선성(VIF)을 확인할게요! 회귀분석 전에 꼭 체크해야 해요 📐", nav=False)
+            run_analysis(["basic", "vif"])
+            st.rerun()
+
+        # ── LEVEL 0: 첫 선택 ──────────────────────────────────────
+        if step == 0:
+            c1, c2, c3 = st.columns(3)
+            if c1.button("데이터 탐색 해줘", use_container_width=True, key="l0_basic"):
+                go_to(["basic"], "데이터 탐색 해줘",
+                      "데이터 탐색은 데이터의 전반적인 특성을 파악하는 단계예요. "
+                      "분포가 어떤지, 변수 간 관계, 결측값 등을 확인할 수 있어요! 😊\n\n"
+                      "어떤 부분을 먼저 볼까요?")
+            if c2.button("통계 검정 해줘", use_container_width=True, key="l0_stats"):
+                go_to(["stats"], "통계 검정 해줘",
+                      "통계 검정은 발견한 패턴이 우연인지, 실제로 의미 있는 건지 "
+                      "수학적으로 확인하는 방법이에요! 📐\n\n"
+                      "어떤 검정을 할까요?")
+            if c3.button("데이터 펼치기 해줘", use_container_width=True, key="l0_pivot"):
+                go_to(["pivot"], "데이터 펼치기 해줘",
+                      "데이터 펼치기는 여러 행에 반복된 데이터를 한 행으로 "
+                      "가로로 정리해주는 기능이에요! 📋\n\n"
+                      "어떤 방식으로 할까요?")
+
+        # ── LEVEL 1: basic ────────────────────────────────────────
+        elif step == 1 and path[0] == "basic":
+            # Row 1
+            c1, c2, c3 = st.columns(3)
+            if c1.button("📊 분포랑 이상치 봐줘", use_container_width=True, key="l1_dist"):
+                go_to(["basic", "distribution"], "분포랑 이상치 봐줘",
+                      "분포 분석은 데이터가 어떤 형태로 퍼져 있는지 히스토그램으로 보여주고, "
+                      "이상치도 박스플롯으로 확인할 수 있어요!\n\n어떤 컬럼을 볼까요?")
+            if c2.button("🔗 상관관계 봐줘 (피어슨)", use_container_width=True, key="l1_corr"):
+                add_user_msg("상관관계 봐줘")
+                add_bot_msg("피어슨 상관관계를 분석할게요! 🔗", nav=False)
+                run_analysis(["basic", "correlation"])
+                st.rerun()
+            if c3.button("❓ 결측값이랑 요약 봐줘", use_container_width=True, key="l1_miss"):
+                add_user_msg("결측값이랑 요약 봐줘")
+                add_bot_msg("결측값 현황과 기술통계를 한번에 보여드릴게요! ❓", nav=False)
+                run_analysis(["basic", "missing"])
+                st.rerun()
+            # Row 2
+            c4, c5, c6 = st.columns(3)
+            if c4.button("🔍 이상치 탐지해줘", use_container_width=True, key="l1_outlier"):
+                go_to(["basic", "outlier"], "이상치 탐지해줘",
+                      "IQR과 Z-score 두 가지 방법으로 이상치를 정밀 탐지해요! 🔍\n\n어떤 컬럼을 볼까요?")
+            if c5.button("📂 빈도 분석해줘", use_container_width=True, key="l1_freq"):
+                go_to(["basic", "frequency"], "빈도 분석해줘",
+                      "범주형 데이터의 빈도와 비율을 분석해요! 📂\n\n어떤 컬럼을 볼까요?")
+            if c6.button("🔗 스피어만 상관분석", use_container_width=True, key="l1_spearman"):
+                add_user_msg("스피어만 상관분석 해줘")
+                add_bot_msg("스피어만 상관분석을 실행할게요! 비선형 관계도 확인할 수 있어요 🔗", nav=False)
+                run_analysis(["basic", "spearman"])
+                st.rerun()
+            # Row 3
+            c7, c8, c9 = st.columns(3)
+            if c7.button("📊 산점도 행렬 봐줘", use_container_width=True, key="l1_pairplot"):
+                add_user_msg("산점도 행렬 봐줘")
+                add_bot_msg("산점도 행렬을 그릴게요! 변수 간 관계를 한눈에 볼 수 있어요 📊", nav=False)
+                run_analysis(["basic", "pairplot"])
+                st.rerun()
+            if c8.button("📐 다중공선성 확인", use_container_width=True, key="l1_vif"):
+                add_user_msg("다중공선성 확인해줘")
+                add_bot_msg("다중공선성(VIF)을 확인할게요! 회귀분석 전에 꼭 체크해야 해요 📐", nav=False)
+                run_analysis(["basic", "vif"])
+                st.rerun()
+            if c9.button("🎻 바이올린 플롯", use_container_width=True, key="l1_violin"):
+                go_to(["basic", "violin"], "바이올린 플롯 봐줘",
+                      "바이올린 플롯은 그룹별 분포 형태를 동시에 비교할 수 있어요! 🎻\n\n"
+                      "수치 컬럼과 그룹 기준을 골라주세요!")
+
+        # ── LEVEL 1: stats ────────────────────────────────────────
+        elif step == 1 and path[0] == "stats":
+            # Row 1
+            c1, c2, c3 = st.columns(3)
+            if c1.button("⚖️ 두 그룹 비교해줘", use_container_width=True, key="l1_ttest"):
+                go_to(["stats", "ttest"], "두 그룹 비교해줘",
+                      "두 그룹 비교(t검정)는 두 집단의 평균이 통계적으로 다른지 "
+                      "확인해줘요! ⚖️ p<0.05이면 유의한 차이가 있는 거예요.\n\n"
+                      "비교할 수치와 그룹 기준을 골라주세요!")
+            if c2.button("📊 여러 그룹 비교해줘", use_container_width=True, key="l1_anova"):
+                go_to(["stats", "anova"], "여러 그룹 비교해줘",
+                      "여러 그룹 비교(ANOVA)는 3개 이상 그룹의 평균 차이를 "
+                      "한번에 검정해줘요! 📊 사후검정도 자동으로 실행돼요.\n\n"
+                      "비교할 수치와 그룹 기준을 골라주세요!")
+            if c3.button("📈 영향 분석해줘", use_container_width=True, key="l1_reg"):
+                go_to(["stats", "regression"], "영향 분석해줘",
+                      "회귀분석은 어떤 변수가 목표값에 얼마나 영향을 미치는지 "
+                      "수치로 보여줘요! 📈\n\n"
+                      "예측할 목표(Y)와 사용할 변수(X)를 골라주세요!")
+            # Row 2
+            c4, c5, c6 = st.columns(3)
+            if c4.button("🔀 카이제곱 검정", use_container_width=True, key="l1_chi2"):
+                go_to(["stats", "chi2"], "카이제곱 검정해줘",
+                      "카이제곱 검정은 두 범주형 변수가 서로 관련 있는지 확인해요! 🔀\n\n"
+                      "비교할 두 범주형 컬럼을 골라주세요!")
+            if c5.button("🔄 전후 비교해줘", use_container_width=True, key="l1_paired"):
+                go_to(["stats", "paired"], "전후 비교해줘",
+                      "대응표본 t검정은 같은 대상의 전/후 수치를 비교해요! 🔄\n\n"
+                      "비교할 두 수치 컬럼(전/후)을 골라주세요!")
+            if c6.button("📊 Kruskal-Wallis", use_container_width=True, key="l1_kruskal"):
+                go_to(["stats", "kruskal"], "Kruskal-Wallis 해줘",
+                      "Kruskal-Wallis는 ANOVA의 비모수 버전이에요. "
+                      "정규분포가 아닐 때 사용해요! 📊\n\n"
+                      "비교할 수치와 그룹 기준을 골라주세요!")
+            # Row 3
+            c7, c8, c9 = st.columns(3)
+            if c7.button("📊 비율 비교해줘", use_container_width=True, key="l1_prop"):
+                go_to(["stats", "proportion"], "비율 비교해줘",
+                      "비율 검정은 두 그룹 간 특정 값의 비율 차이를 검정해요! 📊\n\n"
+                      "비교할 컬럼과 그룹 기준을 골라주세요!")
+            if c8.button("🎯 로지스틱 회귀", use_container_width=True, key="l1_logistic"):
+                go_to(["stats", "logistic"], "로지스틱 회귀 해줘",
+                      "로지스틱 회귀는 이진 결과(예/아니오)를 예측하는 분석이에요! 🎯\n\n"
+                      "예측할 목표(Y, 2개 값)와 사용할 수치 변수(X)를 골라주세요!")
+            if c9.button("⏱️ 생존분석", use_container_width=True, key="l1_survival"):
+                go_to(["stats", "survival"], "생존분석 해줘",
+                      "Kaplan-Meier 생존분석은 시간에 따른 생존 확률을 보여줘요! ⏱️\n\n"
+                      "시간 컬럼과 이벤트(0/1) 컬럼을 골라주세요!")
+            # Row 4
+            c10, c11, _ = st.columns(3)
+            if c10.button("📉 Cox 회귀", use_container_width=True, key="l1_cox"):
+                go_to(["stats", "cox"], "Cox 회귀 해줘",
+                      "Cox 비례위험 모델은 여러 변수가 생존에 미치는 영향을 분석해요! 📉\n\n"
+                      "시간·이벤트 컬럼과 공변량을 골라주세요!")
+
+        # ── LEVEL 1: pivot ────────────────────────────────────────
+        elif step == 1 and path[0] == "pivot":
+            c1, c2 = st.columns(2)
+            if c1.button("1:N으로 펼쳐줘", use_container_width=True, key="l1_1n"):
+                go_to(["pivot", "1n"], "1:N으로 펼쳐줘",
+                      "1:N 펼치기는 한 기준(예: 환자ID)에 대해 여러 행에 걸친 "
+                      "데이터를 한 행 안에 나란히 정리해줘요! 📋\n\n"
+                      "기준 컬럼과 펼칠 데이터를 선택해주세요!")
+            if c2.button("집계해서 요약해줘", use_container_width=True, key="l1_classic"):
+                go_to(["pivot", "classic"], "집계해서 요약해줘",
+                      "집계 피벗은 sum·mean·count 등으로 데이터를 요약해줘요! 📊\n\n"
+                      "기준·열·값 컬럼을 선택해주세요!")
+
+        # ── LEVEL 2: distribution → 컬럼 선택 ───────────────────
+        elif step == 2 and path == ["basic", "distribution"]:
+            if not num_cols:
+                st.warning("수치형 컬럼이 없어요!")
+            elif len(num_cols) <= 3:
+                cols_ui = st.columns(len(num_cols))
+                for i, col in enumerate(num_cols):
+                    if cols_ui[i].button(f"{col} 봐줘", use_container_width=True, key=f"dist_{col}"):
+                        add_user_msg(f"{col} 봐줘")
+                        add_bot_msg(f"**{col}**의 분포를 분석할게요! "
+                                    "히스토그램과 박스플롯으로 보여드릴게요 📊", nav=False)
+                        run_analysis(["basic", "distribution", col])
+                        st.rerun()
+            else:
+                col = st.selectbox("어떤 컬럼을 볼까요?", num_cols, key="sel_dist")
+                if st.button("✅ 분석 시작", type="primary", key="btn_dist"):
+                    add_user_msg(f"{col} 봐줘")
+                    add_bot_msg(f"**{col}**의 분포를 분석할게요! 📊", nav=False)
+                    run_analysis(["basic", "distribution", col])
+                    st.rerun()
+
+        # ── LEVEL 2: ttest → 컬럼+그룹 선택 ─────────────────────
+        elif step == 2 and path == ["stats", "ttest"]:
+            if not num_cols or not cat_cols:
+                st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    sel_col = st.selectbox("비교할 수치 컬럼", num_cols, key="ttest_col")
+                with c2:
+                    sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="ttest_grp")
+                if st.button("✅ 비교 시작할게", type="primary", key="btn_ttest"):
+                    add_user_msg(f"{sel_col}을 {sel_group}으로 비교해줘")
+                    add_bot_msg(f"**{sel_group}별 {sel_col}**을 비교할게요! "
+                                "먼저 정규성을 자동으로 확인하고 적합한 검정을 실행해요 🔍", nav=False)
+                    run_analysis(["stats", "ttest", sel_col, sel_group])
+                    st.rerun()
+
+        # ── LEVEL 2: anova → 컬럼+그룹 선택 ─────────────────────
+        elif step == 2 and path == ["stats", "anova"]:
+            if not num_cols or not cat_cols:
+                st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    sel_col = st.selectbox("비교할 수치 컬럼", num_cols, key="anova_col")
+                with c2:
+                    sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="anova_grp")
+                if st.button("✅ 비교 시작할게", type="primary", key="btn_anova"):
+                    add_user_msg(f"{sel_col}을 {sel_group}으로 ANOVA 분석해줘")
+                    add_bot_msg(f"**{sel_group}별 {sel_col}** ANOVA를 실행할게요! "
+                                "Tukey 사후검정도 자동으로 포함돼요 📊", nav=False)
+                    run_analysis(["stats", "anova", sel_col, sel_group])
+                    st.rerun()
+
+        # ── LEVEL 2: regression → Y + X 선택 ────────────────────
+        elif step == 2 and path == ["stats", "regression"]:
+            if len(num_cols) < 2:
+                st.warning("수치형 컬럼이 2개 이상 필요해요!")
+            else:
+                y_col = st.selectbox("예측 목표 (Y)", num_cols, key="reg_y")
+                x_opts = [c for c in num_cols if c != y_col]
+                x_cols = st.multiselect("사용할 변수 (X)", x_opts, default=x_opts[:2], key="reg_x")
+                if x_cols and st.button("✅ 회귀분석 시작할게", type="primary", key="btn_reg"):
+                    add_user_msg(f"{y_col}에 대한 회귀분석해줘")
+                    add_bot_msg(f"**{y_col}** 회귀분석을 실행할게요! "
+                                f"X변수: {', '.join(x_cols)} 📈", nav=False)
+                    run_analysis(["stats", "regression", y_col] + x_cols)
+                    st.rerun()
+
+        # ── LEVEL 2: outlier → 컬럼 선택 ─────────────────────────
+        elif step == 2 and path == ["basic", "outlier"]:
+            if not num_cols:
+                st.warning("수치형 컬럼이 없어요!")
+            else:
+                col = st.selectbox("어떤 컬럼의 이상치를 볼까요?", num_cols, key="sel_outlier")
+                if st.button("✅ 이상치 탐지 시작", type="primary", key="btn_outlier"):
+                    add_user_msg(f"{col} 이상치 탐지해줘")
+                    add_bot_msg(f"**{col}**의 이상치를 탐지할게요! 🔍", nav=False)
+                    run_analysis(["basic", "outlier", col])
+                    st.rerun()
+
+        # ── LEVEL 2: frequency → 컬럼 선택 ───────────────────────
+        elif step == 2 and path == ["basic", "frequency"]:
+            if not cat_cols:
+                st.warning("범주형 컬럼이 없어요!")
+            else:
+                col = st.selectbox("어떤 컬럼의 빈도를 볼까요?", cat_cols, key="sel_freq")
+                if st.button("✅ 빈도 분석 시작", type="primary", key="btn_freq"):
+                    add_user_msg(f"{col} 빈도 분석해줘")
+                    add_bot_msg(f"**{col}**의 빈도를 분석할게요! 📂", nav=False)
+                    run_analysis(["basic", "frequency", col])
+                    st.rerun()
+
+        # ── LEVEL 2: violin → 수치+그룹 선택 ─────────────────────
+        elif step == 2 and path == ["basic", "violin"]:
+            if not num_cols or not cat_cols:
+                st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    sel_col = st.selectbox("수치 컬럼", num_cols, key="violin_col")
+                with c2:
+                    sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="violin_grp")
+                if st.button("✅ 바이올린 플롯 그릴게", type="primary", key="btn_violin"):
+                    add_user_msg(f"{sel_group}별 {sel_col} 바이올린 플롯")
+                    add_bot_msg(f"**{sel_group}별 {sel_col}** 바이올린 플롯을 그릴게요! 🎻", nav=False)
+                    run_analysis(["basic", "violin", sel_col, sel_group])
+                    st.rerun()
+
+        # ── LEVEL 2: chi2 → 범주형 2개 선택 ──────────────────────
+        elif step == 2 and path == ["stats", "chi2"]:
+            if len(cat_cols) < 2:
+                st.warning("범주형 컬럼이 2개 이상 필요해요!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    sel_col1 = st.selectbox("첫 번째 범주형 컬럼", cat_cols, key="chi2_col1")
+                with c2:
+                    opts2 = [c for c in cat_cols if c != sel_col1]
+                    sel_col2 = st.selectbox("두 번째 범주형 컬럼", opts2, key="chi2_col2")
+                if st.button("✅ 카이제곱 검정 시작", type="primary", key="btn_chi2"):
+                    add_user_msg(f"{sel_col1}와 {sel_col2} 카이제곱 검정해줘")
+                    add_bot_msg(f"**{sel_col1} × {sel_col2}** 카이제곱 검정을 실행할게요! 🔀", nav=False)
+                    run_analysis(["stats", "chi2", sel_col1, sel_col2])
+                    st.rerun()
+
+        # ── LEVEL 2: paired → 수치형 2개 선택 ────────────────────
+        elif step == 2 and path == ["stats", "paired"]:
+            if len(num_cols) < 2:
+                st.warning("수치형 컬럼이 2개 이상 필요해요!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    sel_col1 = st.selectbox("전(Before) 컬럼", num_cols, key="paired_col1")
+                with c2:
+                    opts2 = [c for c in num_cols if c != sel_col1]
+                    sel_col2 = st.selectbox("후(After) 컬럼", opts2, key="paired_col2")
+                if st.button("✅ 전후 비교 시작", type="primary", key="btn_paired"):
+                    add_user_msg(f"{sel_col1}와 {sel_col2} 전후 비교해줘")
+                    add_bot_msg(f"**{sel_col1} vs {sel_col2}** 전후 비교를 실행할게요! 🔄", nav=False)
+                    run_analysis(["stats", "paired", sel_col1, sel_col2])
+                    st.rerun()
+
+        # ── LEVEL 2: kruskal → 수치+그룹 선택 ────────────────────
+        elif step == 2 and path == ["stats", "kruskal"]:
+            if not num_cols or not cat_cols:
+                st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    sel_col = st.selectbox("비교할 수치 컬럼", num_cols, key="kruskal_col")
+                with c2:
+                    sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="kruskal_grp")
+                if st.button("✅ Kruskal-Wallis 시작", type="primary", key="btn_kruskal"):
+                    add_user_msg(f"{sel_col}을 {sel_group}으로 Kruskal-Wallis")
+                    add_bot_msg(f"**{sel_group}별 {sel_col}** Kruskal-Wallis를 실행할게요! 📊", nav=False)
+                    run_analysis(["stats", "kruskal", sel_col, sel_group])
+                    st.rerun()
+
+        # ── LEVEL 2: proportion → 컬럼+그룹 선택 ─────────────────
+        elif step == 2 and path == ["stats", "proportion"]:
+            all_cols_list = df.columns.tolist()
+            if not cat_cols or len(all_cols_list) < 2:
+                st.warning("범주형 컬럼이 2개 이상 필요해요!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    sel_col = st.selectbox("비율 비교할 컬럼", all_cols_list, key="prop_col")
+                with c2:
+                    sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="prop_grp")
+                if st.button("✅ 비율 비교 시작", type="primary", key="btn_prop"):
+                    add_user_msg(f"{sel_col}을 {sel_group}으로 비율 비교")
+                    add_bot_msg(f"**{sel_group}별 {sel_col}** 비율을 비교할게요! 📊", nav=False)
+                    run_analysis(["stats", "proportion", sel_col, sel_group])
+                    st.rerun()
+
+        # ── LEVEL 2: logistic → Y(이진) + X 선택 ─────────────────
+        elif step == 2 and path == ["stats", "logistic"]:
+            all_cols_list = df.columns.tolist()
+            binary_cols = [c for c in all_cols_list if df[c].nunique() == 2]
+            if not binary_cols or len(num_cols) < 1:
+                st.warning("이진(2개 값) 컬럼과 수치형 컬럼이 필요해요!")
+            else:
+                y_col = st.selectbox("예측 목표 (Y, 2개 값)", binary_cols, key="log_y")
+                x_opts = [c for c in num_cols if c != y_col]
+                x_cols = st.multiselect("사용할 변수 (X, 수치형)", x_opts,
+                                        default=x_opts[:3] if len(x_opts) >= 3 else x_opts, key="log_x")
+                if x_cols and st.button("✅ 로지스틱 회귀 시작", type="primary", key="btn_logistic"):
+                    add_user_msg(f"{y_col} 로지스틱 회귀")
+                    add_bot_msg(f"**{y_col}** 로지스틱 회귀를 실행할게요! 🎯", nav=False)
+                    run_analysis(["stats", "logistic", y_col] + x_cols)
+                    st.rerun()
+
+        # ── LEVEL 2: survival → 시간+이벤트+그룹 선택 ─────────────
+        elif step == 2 and path == ["stats", "survival"]:
+            if len(num_cols) < 2:
+                st.warning("수치형 컬럼이 2개 이상 필요해요 (시간 + 이벤트)!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    time_col = st.selectbox("시간 컬럼 (생존 기간)", num_cols, key="surv_time")
+                with c2:
+                    event_col = st.selectbox("이벤트 컬럼 (0/1)", num_cols, key="surv_event")
+                group_col = st.selectbox("그룹 비교 (선택사항)", [None] + cat_cols, key="surv_group")
+                if st.button("✅ 생존분석 시작", type="primary", key="btn_survival"):
+                    add_user_msg("생존분석 해줘")
+                    add_bot_msg("Kaplan-Meier 생존분석을 실행할게요! ⏱️", nav=False)
+                    path_args = ["stats", "survival", time_col, event_col]
+                    if group_col:
+                        path_args.append(group_col)
+                    run_analysis(path_args)
+                    st.rerun()
+
+        # ── LEVEL 2: cox → 시간+이벤트+공변량 선택 ────────────────
+        elif step == 2 and path == ["stats", "cox"]:
+            if len(num_cols) < 3:
+                st.warning("수치형 컬럼이 3개 이상 필요해요 (시간 + 이벤트 + 공변량)!")
+            else:
+                c1, c2 = st.columns(2)
+                with c1:
+                    time_col = st.selectbox("시간 컬럼", num_cols, key="cox_time")
+                with c2:
+                    event_col = st.selectbox("이벤트 컬럼 (0/1)", num_cols, key="cox_event")
+                x_opts = [c for c in num_cols if c not in [time_col, event_col]]
+                x_cols = st.multiselect("공변량 (분석 변수)", x_opts,
+                                        default=x_opts[:3] if len(x_opts) >= 3 else x_opts, key="cox_x")
+                if x_cols and st.button("✅ Cox 회귀 시작", type="primary", key="btn_cox"):
+                    add_user_msg("Cox 회귀 해줘")
+                    add_bot_msg("Cox 비례위험 모델을 실행할게요! 📉", nav=False)
+                    run_analysis(["stats", "cox", time_col, event_col] + x_cols)
+                    st.rerun()
+        # ── LEVEL 2: pivot 1:N ───────────────────────────────────
+        elif step == 2 and path == ["pivot", "1n"]:
+            all_cols = df.columns.tolist()
+            index_sel = st.multiselect("기준 컬럼 (같은 값끼리 묶기)", all_cols, key="piv_idx")
+            if index_sel:
+                remaining = [c for c in all_cols if c not in index_sel]
+                n_counts = df.groupby(index_sel).size()
+                st.caption(f"📊 기준별 데이터 수: 최소 {n_counts.min()} / 최대 {int(n_counts.max())} / 평균 {n_counts.mean():.1f}")
+                values_sel = st.multiselect("펼칠 데이터 컬럼", remaining, key="piv_vals")
+                if values_sel and st.button("✅ 펼치기 시작할게", type="primary", key="btn_1n"):
+                    add_user_msg(f"{', '.join(index_sel)} 기준으로 {', '.join(values_sel)} 펼쳐줘")
+                    add_bot_msg("선택한 설정으로 데이터를 펼칠게요! 🎉", nav=False)
+                    with st.spinner("데이터를 처리하는 중이에요..."):
+                        try:
+                            result_df = perform_pivot(df, index_sel, values_sel,
+                                                       agg_func='first', classic_mode=False)
+                            buf = io.BytesIO()
+                            with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                                result_df.reset_index().to_excel(w, sheet_name='Result', index=False)
+                            csv_data = result_df.reset_index().to_csv(index=False, encoding='utf-8-sig')
+                            add_bot_msg(
+                                f"✅ 완료! **{len(result_df):,}행 × {len(result_df.columns)}열** 결과예요 🎉",
+                                result_df=result_df.head(1000),
+                                export_data={"excel": buf.getvalue(), "csv": csv_data, "png": b""},
                             )
-                            agg_map = {
-                                "첫 번째 값 사용": "first",
-                                "마지막 값 사용": "last",
-                                "가장 작은 값": "min",
-                                "가장 큰 값": "max"
-                            }
-                            agg_func = agg_map[agg_label]
+                        except Exception as e:
+                            add_bot_msg(f"❌ 오류가 발생했어요: {e}")
+                    reset_tree()
+                    st.rerun()
 
-                        # B-4: 컬럼 정렬 순서
-                        if len(values_col) > 1:
-                            sort_option = st.radio(
-                                "결과 컬럼 정렬 방식",
-                                [
-                                    "항목별 그룹 (진단_1, 진단_2, ..., 약품_1, 약품_2, ...)",
-                                    "순번별 그룹 (진단_1, 약품_1, ..., 진단_2, 약품_2, ...)"
-                                ],
-                                horizontal=True,
-                                help="여러 항목을 펼칠 때 결과 컬럼의 배치 순서"
-                            )
-                            sort_by_seq = sort_option.startswith("순번별")
-                        else:
-                            sort_by_seq = False
-
-                        # C-3: 컬럼 접두어 커스터마이징
-                        st.markdown("**결과 컬럼 접두어 설정**")
-                        custom_prefix = {}
-                        num_prefix_cols = min(len(values_col), 4)
-                        prefix_cols_ui = st.columns(num_prefix_cols)
-                        for i, vc in enumerate(values_col):
-                            with prefix_cols_ui[i % num_prefix_cols]:
-                                custom_prefix[vc] = st.text_input(
-                                    f"'{vc}' 접두어",
-                                    value=vc,
-                                    key=f"pfx_{vc}"
-                                )
-
-            # --- 데이터 필터링 (공통) ---
-            filter_mask = pd.Series(True, index=df.index)
-
-            with st.expander("🔍 데이터 필터링 (선택사항)"):
-                filter_col = st.selectbox(
-                    "필터 컬럼", [None] + all_columns, key="filter_col_sel"
-                )
-                if filter_col:
-                    unique_vals = df[filter_col].dropna().unique()
-                    if len(unique_vals) <= 100:
-                        selected_filter = st.multiselect(
-                            f"'{filter_col}' 값 선택",
-                            sorted(unique_vals.astype(str))
-                        )
-                        if selected_filter:
-                            filter_mask = df[filter_col].astype(str).isin(selected_filter)
-                    else:
-                        keyword = st.text_input(
-                            f"'{filter_col}' 검색어 (포함)",
-                            help="입력한 텍스트가 포함된 행만 남깁니다"
-                        )
-                        if keyword:
-                            filter_mask = df[filter_col].astype(str).str.contains(
-                                keyword, case=False, na=False
-                            )
-
-                    filtered_count = int(filter_mask.sum())
-                    if filtered_count < len(df):
-                        st.info(
-                            f"✅ 필터 적용: **{filtered_count:,}**행 / "
-                            f"전체 {len(df):,}행"
-                        )
-
-            # ================================================================
-            # Step 3. 결과
-            # ================================================================
-            if values_col:
-                st.markdown("---")
-                st.markdown("## 📊 Step 3. 결과")
-
-                # 필터 적용
-                if filter_mask.all():
-                    working_df = df
-                else:
-                    working_df = df[filter_mask]
-
-                if len(working_df) == 0:
-                    st.warning(
-                        "⚠️ 필터 적용 후 데이터가 없습니다. "
-                        "필터 조건을 확인해주세요."
-                    )
-                else:
+        # ── LEVEL 2: pivot classic ────────────────────────────────
+        elif step == 2 and path == ["pivot", "classic"]:
+            all_cols = df.columns.tolist()
+            num_c = df.select_dtypes("number").columns.tolist()
+            index_sel = st.multiselect("기준 컬럼 (행)", all_cols, key="cpiv_idx")
+            col_sel = st.selectbox("열 컬럼", [None] + all_cols, key="cpiv_col")
+            val_sel = st.multiselect("값 컬럼 (숫자)", num_c, key="cpiv_val")
+            agg = st.selectbox("집계 방법", ["sum", "mean", "count", "min", "max", "first"], key="cpiv_agg")
+            if index_sel and val_sel and st.button("✅ 피벗 시작할게", type="primary", key="btn_cpiv"):
+                add_user_msg(f"집계 피벗해줘 ({agg})")
+                add_bot_msg(f"**{agg}** 방식으로 피벗을 실행할게요! 📊", nav=False)
+                with st.spinner("처리 중..."):
                     try:
-                        # --- B-2: 미리보기 (상위 3건) ---
-                        sample_keys = working_df[index_cols].drop_duplicates().head(3)
-                        sample_df = working_df.merge(
-                            sample_keys, on=index_cols, how='inner'
-                        )
-
-                        preview_result = perform_pivot(
-                            sample_df, index_cols, values_col,
-                            agg_func=agg_func, max_n=max_n,
-                            sort_by_seq=sort_by_seq,
-                            custom_prefix=custom_prefix,
-                            classic_mode=classic_mode,
-                            columns_col=columns_col
-                        )
-
-                        total_groups = working_df.groupby(index_cols).ngroups
-                        st.markdown(
-                            f"#### 👀 미리보기 "
-                            f"(상위 {min(3, total_groups)}건 / "
-                            f"전체 {total_groups:,}건)"
-                        )
-                        st.dataframe(
-                            preview_result, width='stretch'
-                        )
-
-                        # --- C-2: 원본 ↔ 결과 비교 ---
-                        with st.expander("🔄 원본과 결과 비교 (첫 번째 그룹)"):
-                            cmp1, cmp2 = st.columns(2)
-
-                            # 첫 번째 키 값으로 원본 데이터 추출
-                            first_key_values = sample_keys.iloc[0].to_dict()
-                            orig_mask = pd.Series(True, index=sample_df.index)
-                            for k, v in first_key_values.items():
-                                if pd.isna(v):
-                                    orig_mask &= sample_df[k].isna()
-                                else:
-                                    orig_mask &= (sample_df[k] == v)
-
-                            with cmp1:
-                                st.markdown("**📝 원본 (세로 구조)**")
-                                display_cols = index_cols + [
-                                    c for c in values_col
-                                    if c in sample_df.columns
-                                ]
-                                st.dataframe(
-                                    sample_df[orig_mask][display_cols],
-                                    width='stretch',
-                                    hide_index=True
-                                )
-                            with cmp2:
-                                st.markdown("**📊 결과 (가로로 펼침)**")
-                                st.dataframe(
-                                    preview_result.head(1),
-                                    width='stretch'
-                                )
-
-                        # --- 전체 실행 ---
-                        current_key = str((
-                            tuple(index_cols), tuple(values_col),
-                            agg_func, max_n, sort_by_seq,
-                            str(custom_prefix), classic_mode,
-                            columns_col, int(filter_mask.sum())
-                        ))
-
-                        cached = (
-                            st.session_state.get('_pivot_key') == current_key
-                        )
-
-                        btn_col, info_col = st.columns([1, 3])
-                        with btn_col:
-                            execute_btn = st.button(
-                                "✅ 전체 데이터로 펼치기"
-                                if not classic_mode
-                                else "✅ 전체 데이터로 피벗",
-                                type="primary"
-                            )
-                        with info_col:
-                            if cached:
-                                st.success(
-                                    f"✅ 이전 결과 캐시됨 "
-                                    f"({len(st.session_state._pivot_result):,}행)"
-                                )
-
-                        if execute_btn or cached:
-                            if not cached:
-                                with st.spinner("데이터를 처리하고 있습니다..."):
-                                    final_df = perform_pivot(
-                                        working_df, index_cols, values_col,
-                                        agg_func=agg_func, max_n=max_n,
-                                        sort_by_seq=sort_by_seq,
-                                        custom_prefix=custom_prefix,
-                                        classic_mode=classic_mode,
-                                        columns_col=columns_col
-                                    )
-
-                                # 결과 & Excel 캐싱
-                                st.session_state._pivot_key = current_key
-                                st.session_state._pivot_result = final_df
-
-                                buffer = io.BytesIO()
-                                with pd.ExcelWriter(
-                                    buffer, engine='openpyxl'
-                                ) as writer:
-                                    final_df.reset_index().to_excel(
-                                        writer,
-                                        sheet_name='Result',
-                                        index=False
-                                    )
-                                st.session_state._excel_buffer = (
-                                    buffer.getvalue()
-                                )
-
-                            final_df = st.session_state._pivot_result
-
-                            # --- 결과 표시 ---
-                            MAX_DISPLAY = 5000
-                            total_rows = len(final_df)
-
-                            st.markdown(
-                                f"#### 📊 전체 결과 "
-                                f"({total_rows:,}행 × "
-                                f"{len(final_df.columns)}열)"
-                            )
-
-                            if total_rows > MAX_DISPLAY:
-                                st.warning(
-                                    f"⚠️ 결과가 {total_rows:,}행으로 많아 "
-                                    f"상위 {MAX_DISPLAY:,}행만 표시합니다. "
-                                    f"전체 데이터는 다운로드해주세요."
-                                )
-                                st.dataframe(
-                                    final_df.head(MAX_DISPLAY),
-                                    width='stretch'
-                                )
-                            else:
-                                st.dataframe(
-                                    final_df,
-                                    width='stretch'
-                                )
-
-                            # --- 요약 통계 (일반 피벗) ---
-                            if classic_mode:
-                                numeric_result = final_df.select_dtypes(
-                                    include=['int64', 'float64']
-                                )
-                                if not numeric_result.empty:
-                                    st.markdown("#### 📈 요약 통계")
-                                    mc1, mc2, mc3 = st.columns(3)
-                                    mc1.metric(
-                                        "합계",
-                                        f"{numeric_result.sum().sum():,.0f}"
-                                    )
-                                    mc2.metric(
-                                        "평균",
-                                        f"{numeric_result.mean().mean():,.2f}"
-                                    )
-                                    mc3.metric(
-                                        "최대값",
-                                        f"{numeric_result.max().max():,.0f}"
-                                    )
-
-                            # --- 다운로드 ---
-                            st.markdown("#### 📥 다운로드")
-                            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                            mode_label = (
-                                "펼치기" if not classic_mode else "피벗"
-                            )
-
-                            dl1, dl2 = st.columns(2)
-                            with dl1:
-                                st.download_button(
-                                    label="📥 Excel(.xlsx) 다운로드",
-                                    data=st.session_state._excel_buffer,
-                                    file_name=(
-                                        f"결과_{mode_label}_{timestamp}.xlsx"
-                                    ),
-                                    mime=(
-                                        "application/vnd.openxmlformats-"
-                                        "officedocument.spreadsheetml.sheet"
-                                    )
-                                )
-                            with dl2:
-                                csv_data = final_df.reset_index().to_csv(
-                                    index=False, encoding='utf-8-sig'
-                                )
-                                st.download_button(
-                                    label="📥 CSV 다운로드",
-                                    data=csv_data,
-                                    file_name=(
-                                        f"결과_{mode_label}_{timestamp}.csv"
-                                    ),
-                                    mime='text/csv'
-                                )
-
-                    except KeyError as e:
-                        st.error(
-                            f"⚠️ 선택한 컬럼 '{e}'이 "
-                            f"데이터에 존재하지 않습니다."
-                        )
-                    except ValueError as e:
-                        st.error(f"⚠️ 데이터 처리 중 오류: {e}")
-                        st.info(
-                            "💡 기준 컬럼으로 데이터가 유일하게 구분되지 않아 "
-                            "중복이 발생했을 수 있습니다."
+                        result_df = perform_pivot(df, index_sel, val_sel, agg_func=agg,
+                                                   classic_mode=True, columns_col=col_sel)
+                        buf = io.BytesIO()
+                        with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                            result_df.reset_index().to_excel(w, sheet_name='Result', index=False)
+                        csv_data = result_df.reset_index().to_csv(index=False, encoding='utf-8-sig')
+                        add_bot_msg(
+                            f"✅ 완료! **{len(result_df):,}행** 결과예요 🎉",
+                            result_df=result_df.head(1000),
+                            export_data={"excel": buf.getvalue(), "csv": csv_data, "png": b""},
                         )
                     except Exception as e:
-                        st.error(f"❌ 예상치 못한 오류: {e}")
-                        with st.expander("🔧 상세 오류 로그"):
-                            st.code(traceback.format_exc())
+                        add_bot_msg(f"❌ 오류: {e}")
+                go_back_to_section("pivot")
+                st.rerun()
 
-            elif not values_col and classic_mode:
-                st.info(
-                    "👆 **기준 컬럼**, **열**, **값**을 모두 선택하면 "
-                    "결과가 표시됩니다."
-                )
-            elif not values_col and not classic_mode:
-                st.info(
-                    "👆 **펼칠 데이터**를 선택하면 결과가 표시됩니다."
-                )
-        else:
-            st.info("👆 먼저 **기준 컬럼**을 선택해주세요.")
-
+    if df is None:
+        pass  # 웰컴 메시지는 위에서 chat_message로 표시
     else:
-        st.info("📂 데이터 파일을 업로드하면, 여기에 펼치기 도구가 표시됩니다.")
+        render_level()
+        # 하단 네비게이션:
+        # - 분석 완료 후 tree_step==1 (같은 섹션 Level 2 보여주는 중)
+        #   일 때만 표시 → "다른 분석 해줘"는 Level 1(최상위)로 복귀
+        if (st.session_state.result_section is not None
+                and st.session_state.tree_step == 1):
+            st.divider()
+            if st.button("🏠 홈으로 가기", use_container_width=True, key="nav_home_bottom"):
+                add_user_msg("홈으로 가기")
+                add_bot_msg("처음으로 돌아왔어요! 어떤 분석을 해볼까요? 😊", nav=False)
+                reset_tree()  # 완전 리셋 → Level 0 (최상위 선택)
+                st.rerun()
