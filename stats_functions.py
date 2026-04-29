@@ -21,8 +21,114 @@ from statsmodels.stats.proportion import proportions_ztest
 # 기초 분석
 # ──────────────────────────────────────────────────────────────────
 
+def _dtype_label_kr(dtype) -> str:
+    """pandas dtype → 한글 타입 라벨"""
+    s = str(dtype)
+    if "int" in s or "float" in s:
+        return "🔢 수치형"
+    elif "datetime" in s:
+        return "📅 날짜형"
+    elif "bool" in s:
+        return "✅ 불리언"
+    elif "category" in s:
+        return "🏷️ 범주형"
+    else:
+        return "📝 문자형"
+
+
+def _detect_date_columns(df: pd.DataFrame) -> list:
+    """object 컬럼 중 날짜 패턴(YYYY-MM-DD 등)을 가진 컬럼 감지"""
+    import re
+    pattern = re.compile(r'^\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}')
+    candidates = []
+    for col in df.select_dtypes("object").columns:
+        sample = df[col].dropna().head(20).astype(str)
+        if len(sample) == 0:
+            continue
+        match_ratio = sample.apply(lambda x: bool(pattern.match(x))).mean()
+        if match_ratio >= 0.8:  # 80% 이상 날짜 패턴이면 후보
+            candidates.append(col)
+    return candidates
+
+
+def _generate_type_recommendations(df: pd.DataFrame) -> list:
+    """컬럼별 데이터 타입 변환 추천 생성"""
+    recs = []
+    n_rows = len(df)
+    if n_rows == 0:
+        return recs
+
+    for col in df.columns:
+        nunique = df[col].nunique()
+        dtype = df[col].dtype
+        ratio = nunique / n_rows if n_rows > 0 else 0
+
+        # ── 수치형 컬럼 추천 ──
+        if pd.api.types.is_numeric_dtype(dtype):
+            # 이진 (0/1 등)
+            if nunique == 2:
+                vals = sorted(df[col].dropna().unique().tolist())
+                recs.append({
+                    "col": col,
+                    "icon": "🔴",
+                    "priority": 1,
+                    "reason": f"값이 **{vals[0]}**, **{vals[1]}** 두 가지뿐이에요 → 이진 범주형일 가능성이 높아요",
+                    "action": "범주형 (category)",
+                    "action_type": "범주형 (category)",
+                })
+            # 낮은 카디널리티 (3~10)
+            elif 3 <= nunique <= 10:
+                vals = sorted(df[col].dropna().unique().tolist())[:5]
+                vals_str = ", ".join(str(v) for v in vals)
+                recs.append({
+                    "col": col,
+                    "icon": "🟡",
+                    "priority": 2,
+                    "reason": f"고유값 **{nunique}개** ({vals_str}...) → 코드화된 범주형일 수 있어요",
+                    "action": "범주형 (category)",
+                    "action_type": "범주형 (category)",
+                })
+            # 매우 높은 카디널리티 + 정수형 = ID 후보
+            elif ratio > 0.9 and "int" in str(dtype):
+                recs.append({
+                    "col": col,
+                    "icon": "🔵",
+                    "priority": 3,
+                    "reason": f"고유값 비율 **{ratio:.0%}** → 환자 ID일 수 있어요",
+                    "action": "환자 ID 후보",
+                    "action_type": "id_candidate",
+                })
+
+        # ── 문자형 컬럼 추천 ──
+        elif dtype == "object":
+            # 매우 높은 카디널리티 = ID 후보
+            if ratio > 0.9:
+                recs.append({
+                    "col": col,
+                    "icon": "🔵",
+                    "priority": 3,
+                    "reason": f"고유값 비율 **{ratio:.0%}** → 환자 ID일 수 있어요",
+                    "action": "환자 ID 후보",
+                    "action_type": "id_candidate",
+                })
+            # 낮은 카디널리티 → category 타입 변환 추천
+            elif nunique <= 20:
+                recs.append({
+                    "col": col,
+                    "icon": "🟢",
+                    "priority": 4,
+                    "reason": f"고유값 **{nunique}개** → category 타입으로 변환하면 메모리 효율 ↑",
+                    "action": "범주형 (category)",
+                    "action_type": "범주형 (category)",
+                })
+
+    # 우선순위 정렬
+    recs.sort(key=lambda x: x["priority"])
+    return recs
+
+
 def auto_analyze(df: pd.DataFrame) -> dict:
-    """파일 업로드 직후 자동 실행 — 기본 정보 + 결측값 + 1:N 감지"""
+    """파일 업로드 직후 자동 실행 — 기본 정보 + 결측값 + 1:N 감지 + dtype 요약"""
     num_cols = df.select_dtypes(include=["number"]).columns.tolist()
     cat_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
     date_cols = [c for c in df.columns if pd.api.types.is_datetime64_any_dtype(df[c])]
@@ -32,6 +138,24 @@ def auto_analyze(df: pd.DataFrame) -> dict:
 
     one_n = detect_1n_structure(df)
 
+    # df.info() 스타일 요약 DataFrame
+    dtype_summary = pd.DataFrame({
+        "컬럼명": df.columns,
+        "데이터 타입": [_dtype_label_kr(df[c].dtype) for c in df.columns],
+        "원본 dtype": [str(df[c].dtype) for c in df.columns],
+        "비결측 수": [int(df[c].notna().sum()) for c in df.columns],
+        "결측 수": [int(df[c].isna().sum()) for c in df.columns],
+        "고유값 수": [int(df[c].nunique()) for c in df.columns],
+        "샘플값": [str(df[c].dropna().iloc[0])[:30] if df[c].notna().any() else "-"
+                   for c in df.columns],
+    })
+
+    # DATE 패턴 자동 감지
+    date_candidates = _detect_date_columns(df)
+
+    # 타입 변환 추천
+    type_recommendations = _generate_type_recommendations(df)
+
     return {
         "rows": len(df),
         "cols": len(df.columns),
@@ -40,6 +164,9 @@ def auto_analyze(df: pd.DataFrame) -> dict:
         "date_cols": date_cols,
         "missing": missing,
         "one_n": one_n,
+        "dtype_summary": dtype_summary,
+        "date_candidates": date_candidates,
+        "type_recommendations": type_recommendations,
     }
 
 
@@ -316,9 +443,9 @@ def test_ttest(df: pd.DataFrame, col: str, group_col: str) -> tuple:
 
 def test_anova(df: pd.DataFrame, col: str, group_col: str) -> tuple:
     """일원 ANOVA + Tukey 사후검정"""
-    groups = df.groupby(group_col)[col].apply(lambda x: x.dropna().tolist())
+    groups = df.groupby(group_col, observed=False)[col].apply(lambda x: x.dropna().tolist())
     if len(groups) < 3:
-        return {"오류": "그룹이 3개 미만입니다."}, None, None
+        return {"오류": "그룹이 3개 미만입니다. 두 그룹 비교는 t검정을 이용해 주세요."}, None, None, None
 
     f_stat, p_val = scipy_stats.f_oneway(*groups)
 
