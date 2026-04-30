@@ -5,6 +5,7 @@ from pandas.api.types import is_datetime64_any_dtype
 import io, re
 from datetime import datetime
 import traceback
+import time
 import streamlit_authenticator as stauth
 import stats_functions as sf
 
@@ -141,6 +142,11 @@ elif st.session_state["authentication_status"]:
             st.session_state[k] = v
 
     # ── 헬퍼 함수 ─────────────────────────────────────────────────
+    def stream_text(text):
+        for char in text:
+            yield char
+            time.sleep(0.015)
+
     def add_user_msg(txt):
         st.session_state.chat_history.append({"role": "user", "content": txt})
 
@@ -149,6 +155,7 @@ elif st.session_state["authentication_status"]:
             "role": "assistant", "content": txt,
             "figure": figure, "result_df": result_df,
             "export_data": export_data, "nav": nav,
+            "is_new": True,
         })
 
     def go_to(path, user_msg, bot_msg):
@@ -349,7 +356,12 @@ elif st.session_state["authentication_status"]:
     # ── 대화 기록 렌더링 ─────────────────────────────────────────
     for i, msg in enumerate(st.session_state.chat_history):
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            if msg["role"] == "assistant" and msg.get("is_new", False):
+                st.write_stream(stream_text(msg["content"]))
+                msg["is_new"] = False
+            else:
+                st.markdown(msg["content"])
+                
             if msg.get("figure"):
                 st.plotly_chart(msg["figure"], width='stretch', key=f"chart_{i}")
             if msg.get("result_df") is not None and not msg["result_df"].empty:
