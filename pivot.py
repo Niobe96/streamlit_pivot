@@ -438,16 +438,21 @@ elif st.session_state["authentication_status"]:
 
         # ── 기초: 분포 ── (컬럼 선택 필요 → LEVEL 3에서 처리)
         elif p[:2] == ["basic", "distribution"] and len(p) == 3:
-            col = p[2]
-            fig, stat = sf.plot_histogram(df, col)
-            stat_df = pd.DataFrame([stat])
-            ed = do_export(fig, stat_df, f"{col}_분포")
-            add_bot_msg(
-                f"📊 **{col}** 분포 분석 결과예요!\n\n"
-                f"평균 **{stat['평균']}** / 중앙값 **{stat['중앙값']}** / "
-                f"표준편차 **{stat['표준편차']}** / 이상치(참고) 있음",
-                figure=fig, result_df=stat_df, export_data=ed,
-            )
+            cols = p[2]
+            if isinstance(cols, str):
+                cols = [cols]
+            
+            for col in cols:
+                fig, stat = sf.plot_histogram(df, col)
+                stat_df = pd.DataFrame([stat])
+                ed = do_export(fig, stat_df, f"{col}_분포")
+                add_bot_msg(
+                    f"📊 **{col}** 분포 분석 결과예요!\n\n"
+                    f"평균 **{stat['평균']}** / 중앙값 **{stat['중앙값']}** / "
+                    f"표준편차 **{stat['표준편차']}** / 이상치(참고) 있음",
+                    figure=fig, result_df=stat_df, export_data=ed,
+                )
+                
             go_back_to_section("basic")
 
         # ── 기초: 빈도 ──
@@ -532,11 +537,16 @@ elif st.session_state["authentication_status"]:
 
         # ── 기초: 이상치 상세 탐지 ──
         elif p[:2] == ["basic", "outlier"] and len(p) == 3:
-            col = p[2]
-            fig, summary = sf.detect_outliers_detail(df, col)
-            ed = do_export(fig, summary, f"이상치_{col}")
-            add_bot_msg(f"🔍 **{col}** 이상치 탐지 결과예요!\n\nIQR과 Z-score 두 가지 방법으로 확인했어요.",
-                        figure=fig, result_df=summary, export_data=ed)
+            cols = p[2]
+            if isinstance(cols, str):
+                cols = [cols]
+            
+            for col in cols:
+                fig, summary = sf.detect_outliers_detail(df, col)
+                ed = do_export(fig, summary, f"이상치_{col}")
+                add_bot_msg(f"🔍 **{col}** 이상치 탐지 결과예요!\n\nIQR과 Z-score 두 가지 방법으로 확인했어요.",
+                            figure=fig, result_df=summary, export_data=ed)
+                
             go_back_to_section("basic")
 
         # ── 기초: 산점도 행렬 ──
@@ -823,21 +833,24 @@ elif st.session_state["authentication_status"]:
                 if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_dist"):
                     reset_tree()
                     st.rerun()
-            elif len(num_cols) <= 3:
-                cols_ui = st.columns(len(num_cols))
-                for i, col in enumerate(num_cols):
-                    if cols_ui[i].button(f"{col}", width='stretch', key=f"dist_{col}"):
-                        add_user_msg(f"{col}")
-                        add_bot_msg(f"**{col}**의 분포를 분석할게요! "
-                                    "히스토그램과 박스플롯으로 보여드릴게요 📊", nav=False)
-                        run_analysis(["basic", "distribution", col])
-                        st.rerun()
             else:
-                col = st.selectbox("어떤 컬럼을 볼까요?", num_cols, key="sel_dist")
-                if st.button("✅ 분석 시작", type="primary", key="btn_dist"):
-                    add_user_msg(f"{col}")
-                    add_bot_msg(f"**{col}**의 분포를 분석할게요! 📊", nav=False)
-                    run_analysis(["basic", "distribution", col])
+                sel_cols = st.multiselect(
+                    "어떤 컬럼의 분포를 볼까요? (선택하지 않으면 전체 분석)",
+                    num_cols,
+                    default=[],
+                    key="sel_dist"
+                )
+                if st.button("✅ 분포 분석 시작", type="primary", key="btn_dist"):
+                    target_cols = sel_cols if sel_cols else num_cols
+                    
+                    if len(target_cols) <= 3:
+                        msg_cols = ", ".join(target_cols)
+                    else:
+                        msg_cols = f"{len(target_cols)}개 수치형 컬럼"
+                        
+                    add_user_msg(f"{msg_cols} 분포 분석해줘")
+                    add_bot_msg(f"**{msg_cols}**의 분포를 분석할게요! 📊", nav=False)
+                    run_analysis(["basic", "distribution", target_cols])
                     st.rerun()
 
         # ── LEVEL 2: ttest → 컬럼+그룹 선택 ─────────────────────
@@ -912,11 +925,23 @@ elif st.session_state["authentication_status"]:
                     reset_tree()
                     st.rerun()
             else:
-                col = st.selectbox("어떤 컬럼의 이상치를 볼까요?", num_cols, key="sel_outlier")
+                sel_cols = st.multiselect(
+                    "어떤 컬럼의 이상치를 볼까요? (선택하지 않으면 전체 분석)",
+                    num_cols,
+                    default=[],
+                    key="sel_outlier"
+                )
                 if st.button("✅ 이상치 탐지 시작", type="primary", key="btn_outlier"):
-                    add_user_msg(f"{col} 이상치 탐지해줘")
-                    add_bot_msg(f"**{col}**의 이상치를 탐지할게요! 🔍", nav=False)
-                    run_analysis(["basic", "outlier", col])
+                    target_cols = sel_cols if sel_cols else num_cols
+                    
+                    if len(target_cols) <= 3:
+                        msg_cols = ", ".join(target_cols)
+                    else:
+                        msg_cols = f"{len(target_cols)}개 수치형 컬럼"
+                        
+                    add_user_msg(f"{msg_cols} 이상치 탐지해줘")
+                    add_bot_msg(f"**{msg_cols}**의 이상치를 탐지할게요! 🔍", nav=False)
+                    run_analysis(["basic", "outlier", target_cols])
                     st.rerun()
 
         # ── LEVEL 2: frequency → 컬럼 선택 ───────────────────────
