@@ -17,7 +17,7 @@
         border-bottom: 2px solid #2383e2;
         padding-bottom: 10px;
     }
-    
+
     .kcdw-tutorial-wrap h2 {
         font-size: 24px;
         font-weight: 600;
@@ -26,15 +26,16 @@
         padding-bottom: 10px;
         border-bottom: 1px solid rgba(55, 53, 47, 0.09);
     }
-    
+
     .kcdw-tutorial-wrap h3 {
         font-size: 18px;
         font-weight: 600;
         margin-top: 24px;
         margin-bottom: 12px;
     }
-    
-    .kcdw-tutorial-wrap p, .kcdw-tutorial-wrap li {
+
+    .kcdw-tutorial-wrap p,
+    .kcdw-tutorial-wrap li {
         font-size: 15px;
         margin-bottom: 12px;
         color: #37352f;
@@ -68,18 +69,19 @@
         color: #57606a;
         text-align: center;
     }
-    
+
     .kcdw-tutorial-wrap .image-placeholder img {
         max-width: 100%;
         border-radius: 8px;
         border: 1px solid rgba(55, 53, 47, 0.09);
         display: none;
     }
-    
+
     .kcdw-tutorial-wrap .image-placeholder img[src]:not([src=""]) {
         display: block;
     }
-    .kcdw-tutorial-wrap .image-placeholder img[src]:not([src=""]) ~ .placeholder-text {
+
+    .kcdw-tutorial-wrap .image-placeholder img[src]:not([src=""])~.placeholder-text {
         display: none;
     }
 
@@ -102,13 +104,14 @@
         font-size: 14px;
         border: 1px solid rgba(55, 53, 47, 0.09);
     }
-    
-    .kcdw-tutorial-wrap th, .kcdw-tutorial-wrap td {
+
+    .kcdw-tutorial-wrap th,
+    .kcdw-tutorial-wrap td {
         padding: 10px 14px;
         border-bottom: 1px solid rgba(55, 53, 47, 0.09);
         text-align: left;
     }
-    
+
     .kcdw-tutorial-wrap th {
         background-color: #f7f6f3;
         font-weight: 600;
@@ -122,17 +125,17 @@
         margin: 20px 0;
         border-left: 4px solid #6c757d;
     }
-    
+
     .kcdw-tutorial-wrap .callout.info {
         border-left-color: #2383e2;
         background-color: #f0f7ff;
     }
-    
+
     .kcdw-tutorial-wrap .callout.warning {
         border-left-color: #e5a000;
         background-color: #fffaf0;
     }
-    
+
     /* 인라인 코드 및 프리블록 */
     .kcdw-tutorial-wrap code {
         background-color: rgba(235, 87, 87, 0.1);
@@ -142,7 +145,7 @@
         font-family: 'Consolas', monospace;
         font-size: 0.9em;
     }
-    
+
     .kcdw-tutorial-wrap pre {
         background-color: #f7f6f3;
         padding: 15px;
@@ -152,7 +155,7 @@
         font-size: 13px;
         overflow-x: auto;
     }
-    
+
     .kcdw-tutorial-wrap pre code {
         background-color: transparent;
         color: #37352f;
@@ -161,8 +164,9 @@
 
 <div class="kcdw-tutorial-wrap">
     <h1>[안내] KCDW 데이터 분석 어시스턴트 가이드</h1>
-    
-    <p>환영합니다! <strong>KCDW 데이터 분석 어시스턴트</strong>는 복잡한 코딩이나 통계 지식 없이도 누구나 쉽게 의료 데이터를 정제하고 심도 있게 분석할 수 있도록 돕는 <strong>대화형 분석 플랫폼</strong>입니다.</p>
+
+    <p>환영합니다! <strong>KCDW 데이터 분석 어시스턴트</strong>는 복잡한 코딩이나 통계 지식 없이도 누구나 쉽게 의료 데이터를 정제하고 심도 있게 분석할 수 있도록 돕는 <strong>대화형
+            분석 플랫폼</strong>입니다.</p>
     <p>본 가이드에서는 처음 사용하시는 분들을 위해 <strong>앱 접속부터 최종 결과물 다운로드까지의 전체 흐름</strong>을 단계별로 안내합니다.</p>
 
     <!-- 메인 화면 사진 플레이스홀더 -->
@@ -260,7 +264,8 @@
         </li>
         <li><strong>수동 타입 변환</strong>: 하단의 데이터 타입 표에서 <strong>행을 클릭</strong>하여 원하는 타입으로 직접 변경할 수 있습니다.
             <ul>
-                <li>선택 가능한 타입: <code>수치형 (float)</code> / <code>정수형 (int)</code> / <code>문자형 (object)</code> / <code>범주형 (category)</code> / <code>날짜형 (date)</code></li>
+                <li>선택 가능한 타입: <code>수치형 (float)</code> / <code>정수형 (int)</code> / <code>문자형 (object)</code> /
+                    <code>범주형 (category)</code> / <code>날짜형 (date)</code></li>
             </ul>
         </li>
         <li><strong>되돌리기</strong>: 잘못 변환했다면 변환 이력에서 복구 버튼을 눌러 원래 타입으로 복구할 수 있습니다.</li>
@@ -363,7 +368,8 @@
     <h2>6단계: 결과 확인 및 내보내기</h2>
 
     <h3>▶ 대화형 결과 확인</h3>
-    <p>KCDW 어시스턴트는 <strong>챗봇 형식</strong>으로 동작합니다. 버튼을 눌러 분석을 지시할 때마다 화면 하단에 새로운 채팅과 함께 분석 결과(표, 그래프)가 자동 스크롤되어 나타납니다. 지나간 분석 기록은 스크롤을 올려 다시 볼 수 있습니다.</p>
+    <p>KCDW 어시스턴트는 <strong>챗봇 형식</strong>으로 동작합니다. 버튼을 눌러 분석을 지시할 때마다 화면 하단에 새로운 채팅과 함께 분석 결과(표, 그래프)가 자동 스크롤되어 나타납니다.
+        지나간 분석 기록은 스크롤을 올려 다시 볼 수 있습니다.</p>
 
     <h3>▶ 개별 결과 저장</h3>
     <p>각 분석 결과 아래에 다음과 같은 다운로드 버튼이 제공됩니다:</p>
@@ -388,7 +394,7 @@
 
     <h2>사이드바 빠른 분석</h2>
     <p>데이터 설정 완료 후 사이드바에 <strong>빠른 분석 바로가기</strong> 버튼들이 나타납니다. 메인 메뉴를 거치지 않고 한 번의 클릭으로 원하는 분석에 바로 진입할 수 있습니다.</p>
-    
+
     <ul>
         <li>- 분포 확인 | 상관관계 | 결측 및 요약 | 두 그룹 비교(T-test) | 여러 그룹 비교(ANOVA) | 회귀분석 | 데이터 펼치기</li>
     </ul>
