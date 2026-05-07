@@ -8,6 +8,7 @@ import traceback
 import time
 import streamlit_authenticator as stauth
 import stats_functions as sf
+from streamlit_option_menu import option_menu
 
 # =============================================================================
 # 핵심 로직: perform_pivot (변경 없음)
@@ -75,6 +76,53 @@ def perform_pivot(source_df, index_cols, values_col, agg_func='first',
 # 페이지 설정
 # =============================================================================
 st.set_page_config(page_title="KCDW 분석 어시스턴트", layout="wide", page_icon="🏥")
+
+# --- Custom CSS (Notion/shadcn Style) ---
+st.markdown("""
+<style>
+    /* 버튼 스타일링 */
+    div.stButton > button {
+        border-radius: 8px !important;
+        border: 1px solid #e2e8f0 !important;
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+        font-weight: 500 !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+        transition: all 0.2s ease-in-out !important;
+    }
+    div.stButton > button:hover {
+        background-color: #f8fafc !important;
+        border-color: #cbd5e1 !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+    }
+    
+    /* Primary 버튼 (type="primary") 강조 스타일 */
+    div.stButton > button[kind="primary"] {
+        background-color: #0f172a !important;
+        color: #ffffff !important;
+        border: none !important;
+    }
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #334155 !important;
+    }
+    
+    /* Metric (지표) 스타일링 */
+    div[data-testid="metric-container"] {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        text-align: center; /* 텍스트 가운데 정렬 추가 */
+    }
+    
+    /* 뱃지처럼 보이게 할 caption 스타일 약간 조정 */
+    .stCaption {
+        font-size: 0.85rem !important;
+        color: #475569 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # =============================================================================
 # 인증
@@ -222,93 +270,123 @@ elif st.session_state["authentication_status"]:
 
     # ── 사이드바 ──────────────────────────────────────────────────
     with st.sidebar:
-        st.markdown("## 🏥 KCDW")
-        st.divider()
 
-        uploaded = st.file_uploader("📁 데이터 파일 업로드", type=['csv', 'xlsx'])
-        if uploaded:
-            load_file(uploaded)
+        selected_menu = option_menu(
+            menu_title=None,
+            options=["데이터 관리", "빠른 분석", "내보내기"],
+            icons=["database", "lightning", "download"],
+            menu_icon="cast",
+            default_index=0,
+        )
+        # st.divider()
 
-        if st.session_state.df is not None:
-            df = st.session_state.df
-            st.caption(f"📂 {st.session_state.source_name}")
-            c1, c2 = st.columns(2)
-            c1.metric("행", f"{len(df):,}")
-            c2.metric("열", f"{len(df.columns):,}")
-            st.divider()
+        if selected_menu == "데이터 관리":
+            uploaded = st.file_uploader("", type=['csv', 'xlsx'])
+            if uploaded:
+                load_file(uploaded)
 
-            # ── 데이터 설정 요약 (메인에서 설정, 여기는 요약만) ──────
-            if st.session_state.data_configured:
-                pid = st.session_state.patient_id_col
-                dep = st.session_state.dependent_var_col
-                st.caption(f"🆔 환자 ID: **{pid or '미설정'}**")
-                st.caption(f"🎯 종속변수: **{dep or '미설정'}**")
-                if st.session_state.dtype_overrides:
-                    st.caption(f"🔧 타입 변환: {len(st.session_state.dtype_overrides)}건")
-                if st.button("⚙️ 설정 변경", width='stretch', key="btn_reconfig"):
-                    st.session_state.data_configured = False
-                    st.session_state.config_step = 1
-                    st.rerun()
+            if st.session_state.df is not None:
+                df = st.session_state.df
+                # st.caption(f"📂 {st.session_state.source_name}")
+                c1, c2 = st.columns(2)
+                
+                def make_metric_card(title, value):
+                    return f"""
+                    <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05); margin-bottom: 1rem;">
+                        <div style="color: #64748b; font-size: 0.85rem; font-weight: 600; margin-bottom: 4px;">{title}</div>
+                        <div style="color: #0f172a; font-size: 1.5rem; font-weight: 700;">{value}</div>
+                    </div>
+                    """
+                
+                c1.markdown(make_metric_card("행 (Rows)", f"{len(df):,}"), unsafe_allow_html=True)
+                c2.markdown(make_metric_card("열 (Columns)", f"{len(df.columns):,}"), unsafe_allow_html=True)
+                # st.divider()
+
+                # ── 데이터 설정 요약 (메인에서 설정, 여기는 요약만) ──────
+                if st.session_state.data_configured:
+                    pid = st.session_state.patient_id_col
+                    dep = st.session_state.dependent_var_col
+                    
+                    html_card = f"""
+                    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                        <div style="font-size: 0.9rem; font-weight: 600; color: #334155; margin-bottom: 8px;">⚙️ 데이터 설정</div>
+                        <div style="font-size: 0.85rem; color: #475569; margin-bottom: 4px;">🆔 환자 ID: <b>{pid or '미설정'}</b></div>
+                        <div style="font-size: 0.85rem; color: #475569; margin-bottom: 4px;">🎯 종속변수: <b>{dep or '미설정'}</b></div>
+                    """
+                    if st.session_state.dtype_overrides:
+                        html_card += f'<div style="font-size: 0.85rem; color: #475569; margin-top: 4px;">🔧 타입 변환: <b>{len(st.session_state.dtype_overrides)}건</b></div>'
+                    html_card += "</div>"
+                    
+                    st.markdown(html_card, unsafe_allow_html=True)
+                    
+                    if st.button("⚙️ 설정 변경", use_container_width=True, key="btn_reconfig"):
+                        st.session_state.data_configured = False
+                        st.session_state.config_step = 1
+                        st.rerun()
+
+        elif selected_menu == "빠른 분석":
+            # 빠른 분석 버튼 (데이터 로드 후)
+            if st.session_state.df is not None:
+                st.caption("⚡ 빠른 분석")
+                quick_map = {
+                    "📊 분포 확인": ("basic", "distribution"),
+                    "🔗 상관관계": ("basic", "correlation"),
+                    "❓ 결측/요약": ("basic", "missing"),
+                    "⚖️ 두 그룹 비교(T-test)": ("stats", "ttest"),
+                    "📊 여러 그룹 비교(ANOVA)": ("stats", "anova"),
+                    "📈 회귀분석": ("stats", "regression"),
+                    "📐 데이터 펼치기": ("pivot", "1n"),
+                }
+                for label, (p1, p2) in quick_map.items():
+                    if st.button(label, width="stretch", key=f"quick_{p2}"):
+                        path = [p1, p2]
+                        st.session_state.tree_path = path
+                        st.session_state.tree_step = len(path)
+                        st.rerun()
             else:
-                st.caption("⚙️ 메인 화면에서 데이터 설정을 진행해주세요")
+                st.info("데이터를 먼저 업로드해주세요.")
 
-        st.divider()
-
-        # 빠른 분석 버튼 (데이터 로드 후)
-        if st.session_state.df is not None:
-            st.caption("⚡ 빠른 분석")
-            quick_map = {
-                "📊 분포 확인": ("basic", "distribution"),
-                "🔗 상관관계": ("basic", "correlation"),
-                "❓ 결측/요약": ("basic", "missing"),
-                "⚖️ 두 그룹 비교(T-test)": ("stats", "ttest"),
-                "📊 여러 그룹 비교(ANOVA)": ("stats", "anova"),
-                "📈 회귀분석": ("stats", "regression"),
-                "📐 데이터 펼치기": ("pivot", "1n"),
-            }
-            for label, (p1, p2) in quick_map.items():
-                if st.button(label, width='stretch', key=f"quick_{p2}"):
-                    path = [p1, p2]
-                    st.session_state.tree_path = path
-                    st.session_state.tree_step = len(path)
-                    st.rerun()
-            st.divider()
-
-        # 전체 결과 내보내기
-        if st.session_state.export_buffer:
-            excel_all = sf.export_to_excel(st.session_state.export_buffer)
-            st.download_button(
-                "📋 전체 분석 Excel 저장",
-                data=excel_all,
-                file_name=f"전체분석_{ts()}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                width='stretch',
-            )
-
-            # 전체 이미지 ZIP 저장
-            import zipfile
-            png_items = [
-                (item.get("png", b""), item.get("sheet_name", f"차트_{i+1}"))
-                for i, item in enumerate(st.session_state.export_buffer)
-                if item.get("fig") is not None and item.get("png")
-            ]
-            if png_items:
-                zip_buf = io.BytesIO()
-                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for png_bytes, name in png_items:
-                        safe_name = re.sub(r'[\\/*?:"<>|]', '_', name)
-                        zf.writestr(f"{safe_name}.png", png_bytes)
+        elif selected_menu == "내보내기":
+            # 전체 결과 내보내기
+            if st.session_state.export_buffer:
+                excel_all = sf.export_to_excel(st.session_state.export_buffer)
                 st.download_button(
-                    "🖼️ 전체 분석 이미지 저장 (ZIP)",
-                    data=zip_buf.getvalue(),
-                    file_name=f"전체분석_이미지_{ts()}.zip",
-                    mime="application/zip",
-                    width='stretch',
+                    "📋 전체 분석 Excel 저장",
+                    data=excel_all,
+                    file_name=f"전체분석_{ts()}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    width="stretch",
                 )
-            st.divider()
 
-        st.write(f"👤 **{st.session_state['name']}**님")
-        authenticator.logout('🚪 로그아웃', 'sidebar')
+                # 전체 이미지 ZIP 저장
+                import zipfile
+                png_items = [
+                    (item.get("png", b""), item.get("sheet_name", f"차트_{i+1}"))
+                    for i, item in enumerate(st.session_state.export_buffer)
+                    if item.get("fig") is not None and item.get("png")
+                ]
+                if png_items:
+                    zip_buf = io.BytesIO()
+                    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        for png_bytes, name in png_items:
+                            safe_name = re.sub(r'[\\/*?:"<>|]', '_', name)
+                            zf.writestr(f"{safe_name}.png", png_bytes)
+                    st.download_button(
+                        "🖼️ 전체 분석 이미지 저장 (ZIP)",
+                        data=zip_buf.getvalue(),
+                        file_name=f"전체분석_이미지_{ts()}.zip",
+                        mime="application/zip",
+                        use_container_width=True,
+                    )
+            else:
+                st.info("내보낼 분석 결과가 없습니다.")
+
+        # st.divider()
+
+        st.markdown(f"<div style=' margin-bottom: 10px; color: #334155;'>👤 <b>{st.session_state['name']}</b>님</div>", unsafe_allow_html=True)
+        c_empty, c_btn = st.columns([1, 1])
+        with c_btn:
+            authenticator.logout('로그아웃')
 
     # ── 메인 영역 ─────────────────────────────────────────────────
     df = st.session_state.df
@@ -322,7 +400,7 @@ elif st.session_state["authentication_status"]:
                 "- 📊 **데이터 탐색** — 분포, 상관관계, 결측값 확인\n"
                 "- 🔬 **통계 검정** — 그룹 비교(t검정·ANOVA), 회귀분석\n"
                 "- 📐 **데이터 펼치기** — 1:N 구조를 가로로 정리\n\n"
-                "💡 **왼쪽 사이드바**에서 CSV 또는 Excel 파일을 업로드해주세요!\n"
+                " **왼쪽 사이드바**에서 CSV 또는 Excel 파일을 업로드해주세요!\n"
                 "업로드하면 자동으로 데이터를 분석하고 안내해드릴게요 😊"
             )
 
@@ -468,7 +546,7 @@ elif st.session_state["authentication_status"]:
                 stat_df = pd.DataFrame([stat])
                 ed = do_export(fig, stat_df, f"{col}_분포")
                 add_bot_msg(
-                    f"📊 **{col}** 분포 분석 결과예요!\n\n"
+                    f" **{col}** 분포 분석 결과예요!\n\n"
                     f"평균 **{stat['평균']}** / 중앙값 **{stat['중앙값']}** / "
                     f"표준편차 **{stat['표준편차']}** / 이상치(참고) 있음",
                     figure=fig, result_df=stat_df, export_data=ed,
@@ -577,7 +655,7 @@ elif st.session_state["authentication_status"]:
                 add_bot_msg("수치형 컬럼이 2개 이상 필요해요!", nav=False)
             else:
                 ed = do_export(fig, corr_df, "산점도행렬")
-                add_bot_msg("📊 산점도 행렬이에요!\n\n대각선은 각 변수의 분포, 나머지는 변수 간 관계를 보여줘요.",
+                add_bot_msg("🪮 산점도 행렬이에요!\n\n대각선은 각 변수의 분포, 나머지는 변수 간 관계를 보여줘요.",
                             figure=fig, result_df=corr_df, export_data=ed)
             go_back_to_section("basic")
 
@@ -715,17 +793,17 @@ elif st.session_state["authentication_status"]:
         # ── LEVEL 0: 첫 선택 ──────────────────────────────────────
         if step == 0:
             c1, c2, c3 = st.columns(3)
-            if c1.button("데이터 탐색", width='stretch', key="l0_basic"):
+            if c1.button("데이터 탐색", width="stretch", key="l0_basic"):
                 go_to(["basic"], "데이터 탐색",
                       "데이터 탐색은 데이터의 전반적인 특성을 파악하는 단계예요. "
                       "분포가 어떤지, 변수 간 관계, 결측값 등을 확인할 수 있어요! 😊\n\n"
                       "어떤 부분을 먼저 볼까요?")
-            if c2.button("통계 검정", width='stretch', key="l0_stats"):
+            if c2.button("통계 검정", width="stretch", key="l0_stats"):
                 go_to(["stats"], "통계 검정",
                       "통계 검정은 발견한 패턴이 우연인지, 실제로 의미 있는 건지 "
                       "수학적으로 확인하는 방법이에요! 📐\n\n"
                       "어떤 검정을 할까요?")
-            if c3.button("데이터 펼치기", width='stretch', key="l0_pivot"):
+            if c3.button("데이터 펼치기", width="stretch", key="l0_pivot"):
                 go_to(["pivot"], "데이터 펼치기",
                       "데이터 펼치기는 여러 행에 반복된 데이터를 한 행으로 "
                       "가로로 정리해주는 기능이에요! 📋\n\n"
@@ -735,46 +813,46 @@ elif st.session_state["authentication_status"]:
         elif step == 1 and path[0] == "basic":
             # Row 1
             c1, c2, c3 = st.columns(3)
-            if c1.button("📊 분포 / 이상치 분석", width='stretch', key="l1_dist"):
+            if c1.button("📊 분포 / 이상치 분석", width="stretch", key="l1_dist"):
                 go_to(["basic", "distribution"], "분포 / 이상치 분석",
                       "분포 분석은 데이터가 어떤 형태로 퍼져 있는지 히스토그램으로 보여주고, "
                       "이상치도 박스플롯으로 확인할 수 있어요!\n\n어떤 컬럼을 볼까요?")
-            if c2.button("🔗 상관관계 (피어슨)", width='stretch', key="l1_corr"):
+            if c2.button("🔗 상관관계 (피어슨)", width="stretch", key="l1_corr"):
                 add_user_msg("상관관계 분석")
                 add_bot_msg("피어슨 상관관계를 분석할게요! 🔗", nav=False)
                 run_analysis(["basic", "correlation"])
                 st.rerun()
-            if c3.button("❓ 결측값 / 기술통계 분석", width='stretch', key="l1_miss"):
+            if c3.button("❓ 결측값 / 기술통계 분석", width="stretch", key="l1_miss"):
                 add_user_msg("결측값 / 기술통계 분석")
                 add_bot_msg("결측값 현황과 기술통계를 한번에 보여드릴게요! ❓", nav=False)
                 run_analysis(["basic", "missing"])
                 st.rerun()
             # Row 2
             c4, c5, c6 = st.columns(3)
-            if c4.button("🔍 이상치 탐지", width='stretch', key="l1_outlier"):
+            if c4.button("🔍 이상치 탐지", width="stretch", key="l1_outlier"):
                 go_to(["basic", "outlier"], "이상치 탐지",
                       "IQR과 Z-score 두 가지 방법으로 이상치를 정밀 탐지해요! 🔍\n\n어떤 컬럼을 볼까요?")
-            if c5.button("📂 빈도 분석", width='stretch', key="l1_freq"):
+            if c5.button("📂 빈도 분석", width="stretch", key="l1_freq"):
                 go_to(["basic", "frequency"], "빈도 분석",
                       "범주형 데이터의 빈도와 비율을 분석해요! 📂\n\n어떤 컬럼을 볼까요?")
-            if c6.button("🔗 스피어만 상관분석", width='stretch', key="l1_spearman"):
+            if c6.button("🔗 스피어만 상관분석", width="stretch", key="l1_spearman"):
                 add_user_msg("스피어만 상관분석")
                 add_bot_msg("스피어만 상관분석을 실행할게요! 비선형 관계도 확인할 수 있어요 🔗", nav=False)
                 run_analysis(["basic", "spearman"])
                 st.rerun()
             # Row 3
             c7, c8, c9 = st.columns(3)
-            if c7.button("📊 산점도 행렬", width='stretch', key="l1_pairplot"):
+            if c7.button("🪮 산점도 행렬", width="stretch", key="l1_pairplot"):
                 add_user_msg("산점도 행렬")
                 add_bot_msg("산점도 행렬을 그릴게요! 변수 간 관계를 한눈에 볼 수 있어요 📊", nav=False)
                 run_analysis(["basic", "pairplot"])
                 st.rerun()
-            if c8.button("📐 다중공선성 확인", width='stretch', key="l1_vif"):
+            if c8.button("📐 다중공선성 확인", width="stretch", key="l1_vif"):
                 add_user_msg("다중공선성 확인")
                 add_bot_msg("다중공선성(VIF)을 확인할게요! 회귀분석 전에 꼭 체크해야 해요 📐", nav=False)
                 run_analysis(["basic", "vif"])
                 st.rerun()
-            if c9.button("🎻 바이올린 플롯", width='stretch', key="l1_violin"):
+            if c9.button("🎻 바이올린 플롯", width="stretch", key="l1_violin"):
                 go_to(["basic", "violin"], "바이올린 플롯 분석",
                       "바이올린 플롯은 그룹별 분포 형태를 동시에 비교할 수 있어요! 🎻\n\n"
                       "수치 컬럼과 그룹 기준을 골라주세요!")
@@ -783,53 +861,53 @@ elif st.session_state["authentication_status"]:
         elif step == 1 and path[0] == "stats":
             # Row 1
             c1, c2, c3 = st.columns(3)
-            if c1.button("⚖️ 두 그룹 비교(T-test)", width='stretch', key="l1_ttest"):
+            if c1.button("⚖️ 두 그룹 비교(T-test)", width="stretch", key="l1_ttest"):
                 go_to(["stats", "ttest"], "두 그룹 비교(T-test)",
                       "두 그룹 비교(t검정)는 두 집단의 평균이 통계적으로 다른지 "
                       "확인해줘요! ⚖️ p<0.05이면 유의한 차이가 있는 거예요.\n\n"
                       "비교할 수치와 그룹 기준을 골라주세요!")
-            if c2.button("📊 여러 그룹 비교(ANOVA)", width='stretch', key="l1_anova"):
+            if c2.button("📊 여러 그룹 비교(ANOVA)", width="stretch", key="l1_anova"):
                 go_to(["stats", "anova"], "여러 그룹 비교(ANOVA)",
                       "여러 그룹 비교(ANOVA)는 3개 이상 그룹의 평균 차이를 "
                       "한번에 검정해줘요! 📊 사후검정도 자동으로 실행돼요.\n\n"
                       "비교할 수치와 그룹 기준을 골라주세요!")
-            if c3.button("📈 영향 분석(Regression)", width='stretch', key="l1_reg"):
+            if c3.button("📈 영향 분석(Regression)", width="stretch", key="l1_reg"):
                 go_to(["stats", "regression"], "영향 분석",
                       "회귀분석은 어떤 변수가 목표값에 얼마나 영향을 미치는지 "
                       "수치로 보여줘요! 📈\n\n"
                       "예측할 목표(Y)와 사용할 변수(X)를 골라주세요!")
             # Row 2
             c4, c5, c6 = st.columns(3)
-            if c4.button("🔀 카이제곱 검정(Chi-squared Test)", width='stretch', key="l1_chi2"):
+            if c4.button("🔀 카이제곱 검정(Chi-squared Test)", width="stretch", key="l1_chi2"):
                 go_to(["stats", "chi2"], "카이제곱 검정(Chi-squared Test)",
                       "카이제곱 검정은 두 범주형 변수가 서로 관련 있는지 확인해요! 🔀\n\n"
                       "비교할 두 범주형 컬럼을 골라주세요!")
-            if c5.button("🔄 전후 비교(Paired T-test)", width='stretch', key="l1_paired"):
+            if c5.button("🔄 전후 비교(Paired T-test)", width="stretch", key="l1_paired"):
                 go_to(["stats", "paired"], "전후 비교(Paired T-test)",
                       "대응표본 t검정은 같은 대상의 전/후 수치를 비교해요! 🔄\n\n"
                       "비교할 두 수치 컬럼(전/후)을 골라주세요!")
-            if c6.button("📊 Kruskal-Wallis", width='stretch', key="l1_kruskal"):
+            if c6.button("📊 Kruskal-Wallis", width="stretch", key="l1_kruskal"):
                 go_to(["stats", "kruskal"], "Kruskal-Wallis",
                       "Kruskal-Wallis는 ANOVA의 비모수 버전이에요. "
                       "정규분포가 아닐 때 사용해요! 📊\n\n"
                       "비교할 수치와 그룹 기준을 골라주세요!")
             # Row 3
             c7, c8, c9 = st.columns(3)
-            if c7.button("📊 비율 비교(Proportion Test)", width='stretch', key="l1_prop"):
+            if c7.button("📊 비율 비교(Proportion Test)", width="stretch", key="l1_prop"):
                 go_to(["stats", "proportion"], "비율 비교(Proportion Test)",
                       "비율 검정은 두 그룹 간 특정 값의 비율 차이를 검정해요! 📊\n\n"
                       "비교할 컬럼과 그룹 기준을 골라주세요!")
-            if c8.button("🎯 로지스틱 회귀(Logistic Regression)", width='stretch', key="l1_logistic"):
+            if c8.button("🎯 로지스틱 회귀(Logistic Regression)", width="stretch", key="l1_logistic"):
                 go_to(["stats", "logistic"], "로지스틱 회귀(Logistic Regression)",
                       "로지스틱 회귀는 이진 결과(예/아니오)를 예측하는 분석이에요! 🎯\n\n"
                       "예측할 목표(Y, 2개 값)와 사용할 수치 변수(X)를 골라주세요!")
-            if c9.button("⏱️ 생존분석(Kaplan-Meier)", width='stretch', key="l1_survival"):
+            if c9.button("⏱️ 생존분석(Kaplan-Meier)", width="stretch", key="l1_survival"):
                 go_to(["stats", "survival"], "생존분석(Kaplan-Meier)",
                       "Kaplan-Meier 생존분석은 시간에 따른 생존 확률을 보여줘요! ⏱️\n\n"
                       "시간 컬럼과 이벤트(0/1) 컬럼을 골라주세요!")
             # Row 4
             c10, c11, _ = st.columns(3)
-            if c10.button("📉 Cox 회귀 분석(Cox Regression)", width='stretch', key="l1_cox"):
+            if c10.button("📉 Cox 회귀 분석(Cox Regression)", width="stretch", key="l1_cox"):
                 go_to(["stats", "cox"], "Cox 회귀 분석(Cox Regression)",
                       "Cox 비례위험 모델은 여러 변수가 생존에 미치는 영향을 분석해요! 📉\n\n"
                       "시간·이벤트 컬럼과 공변량을 골라주세요!")
@@ -837,12 +915,12 @@ elif st.session_state["authentication_status"]:
         # ── LEVEL 1: pivot ────────────────────────────────────────
         elif step == 1 and path[0] == "pivot":
             c1, c2 = st.columns(2)
-            if c1.button("1:N으로 펼쳐줘", width='stretch', key="l1_1n"):
+            if c1.button("1:N으로 펼쳐줘", width="stretch", key="l1_1n"):
                 go_to(["pivot", "1n"], "1:N으로 펼쳐줘",
                       "1:N 펼치기는 한 기준(예: 환자ID)에 대해 여러 행에 걸친 "
                       "데이터를 한 행 안에 나란히 정리해줘요! 📋\n\n"
                       "기준 컬럼과 펼칠 데이터를 선택해주세요!")
-            if c2.button("집계하여 요약", width='stretch', key="l1_classic"):
+            if c2.button("집계하여 요약", width="stretch", key="l1_classic"):
                 go_to(["pivot", "classic"], "집계하여 요약",
                       "집계 피벗은 sum·mean·count 등으로 데이터를 요약해줘요! 📊\n\n"
                       "기준·열·값 컬럼을 선택해주세요!")
@@ -851,7 +929,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["basic", "distribution"]:
             if not num_cols:
                 st.warning("수치형 컬럼이 없어요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_dist"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_dist"):
                     reset_tree()
                     st.rerun()
             else:
@@ -861,7 +939,7 @@ elif st.session_state["authentication_status"]:
                     default=[],
                     key="sel_dist"
                 )
-                if st.button("✅ 분포 분석 시작", type="primary", key="btn_dist"):
+                if st.button("✅ 분포 분석 시작", type="primary", width="stretch", key="btn_dist"):
                     target_cols = sel_cols if sel_cols else num_cols
                     
                     if len(target_cols) <= 3:
@@ -878,7 +956,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["stats", "ttest"]:
             if not num_cols or not cat_cols:
                 st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_ttest"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_ttest"):
                     reset_tree()
                     st.rerun()
             else:
@@ -889,7 +967,7 @@ elif st.session_state["authentication_status"]:
                     sel_col = st.selectbox("비교할 수치 컬럼", num_cols, index=col_default, key="ttest_col")
                 with c2:
                     sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="ttest_grp")
-                if st.button("✅ 비교 시작", type="primary", key="btn_ttest"):
+                if st.button("✅ 비교 시작", type="primary", width="stretch", key="btn_ttest"):
                     add_user_msg(f"{sel_col}을 {sel_group}으로 비교해줘")
                     add_bot_msg(f"**{sel_group}별 {sel_col}**을 비교할게요! "
                                 "먼저 정규성을 자동으로 확인하고 적합한 검정을 실행해요 🔍", nav=False)
@@ -900,7 +978,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["stats", "anova"]:
             if not num_cols or not cat_cols:
                 st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_anova"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_anova"):
                     reset_tree()
                     st.rerun()
             else:
@@ -911,7 +989,7 @@ elif st.session_state["authentication_status"]:
                     sel_col = st.selectbox("비교할 수치 컬럼", num_cols, index=col_default, key="anova_col")
                 with c2:
                     sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="anova_grp")
-                if st.button("✅ 비교 시작", type="primary", key="btn_anova"):
+                if st.button("✅ 비교 시작", type="primary", width="stretch", key="btn_anova"):
                     add_user_msg(f"{sel_col}을 {sel_group}으로 ANOVA 분석해줘")
                     add_bot_msg(f"**{sel_group}별 {sel_col}** ANOVA를 실행할게요! "
                                 "Tukey 사후검정도 자동으로 포함돼요 📊", nav=False)
@@ -922,7 +1000,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["stats", "regression"]:
             if len(num_cols) < 2:
                 st.warning("수치형 컬럼이 2개 이상 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_reg"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_reg"):
                     reset_tree()
                     st.rerun()
             else:
@@ -931,7 +1009,7 @@ elif st.session_state["authentication_status"]:
                 y_col = st.selectbox("예측 목표 (Y)", num_cols, index=y_idx, key="reg_y")
                 x_opts = [c for c in num_cols if c != y_col]
                 x_cols = st.multiselect("사용할 변수 (X)", x_opts, default=x_opts[:2], key="reg_x")
-                if x_cols and st.button("✅ 회귀분석 시작", type="primary", key="btn_reg"):
+                if x_cols and st.button("✅ 회귀분석 시작", type="primary", width="stretch", key="btn_reg"):
                     add_user_msg(f"{y_col}에 대한 회귀분석해줘")
                     add_bot_msg(f"**{y_col}** 회귀분석을 실행할게요! "
                                 f"X변수: {', '.join(x_cols)} 📈", nav=False)
@@ -942,7 +1020,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["basic", "outlier"]:
             if not num_cols:
                 st.warning("수치형 컬럼이 없어요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_outlier"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_outlier"):
                     reset_tree()
                     st.rerun()
             else:
@@ -952,7 +1030,7 @@ elif st.session_state["authentication_status"]:
                     default=[],
                     key="sel_outlier"
                 )
-                if st.button("✅ 이상치 탐지 시작", type="primary", key="btn_outlier"):
+                if st.button("✅ 이상치 탐지 시작", type="primary", width="stretch", key="btn_outlier"):
                     target_cols = sel_cols if sel_cols else num_cols
                     
                     if len(target_cols) <= 3:
@@ -969,7 +1047,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["basic", "frequency"]:
             if not cat_cols:
                 st.warning("범주형 컬럼이 없어요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_freq"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_freq"):
                     reset_tree()
                     st.rerun()
             else:
@@ -979,7 +1057,7 @@ elif st.session_state["authentication_status"]:
                     default=[],
                     key="sel_freq"
                 )
-                if st.button("✅ 빈도 분석 시작", type="primary", key="btn_freq"):
+                if st.button("✅ 빈도 분석 시작", type="primary", width="stretch", key="btn_freq"):
                     target_cols = sel_cols if sel_cols else cat_cols
                     
                     if len(target_cols) <= 3:
@@ -996,7 +1074,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["basic", "violin"]:
             if not num_cols or not cat_cols:
                 st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_violin"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_violin"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1005,7 +1083,7 @@ elif st.session_state["authentication_status"]:
                     sel_col = st.selectbox("수치 컬럼", num_cols, key="violin_col")
                 with c2:
                     sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="violin_grp")
-                if st.button("✅ 바이올린 플롯 분석", type="primary", key="btn_violin"):
+                if st.button("✅ 바이올린 플롯 분석", type="primary", width="stretch", key="btn_violin"):
                     add_user_msg(f"{sel_group}별 {sel_col} 바이올린 플롯")
                     add_bot_msg(f"**{sel_group}별 {sel_col}** 바이올린 플롯을 그릴게요! 🎻", nav=False)
                     run_analysis(["basic", "violin", sel_col, sel_group])
@@ -1015,7 +1093,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["stats", "chi2"]:
             if len(cat_cols) < 2:
                 st.warning("범주형 컬럼이 2개 이상 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_chi2"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_chi2"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1025,7 +1103,7 @@ elif st.session_state["authentication_status"]:
                 with c2:
                     opts2 = [c for c in cat_cols if c != sel_col1]
                     sel_col2 = st.selectbox("두 번째 범주형 컬럼", opts2, key="chi2_col2")
-                if st.button("✅ 카이제곱 검정 시작", type="primary", key="btn_chi2"):
+                if st.button("✅ 카이제곱 검정 시작", type="primary", width="stretch", key="btn_chi2"):
                     add_user_msg(f"{sel_col1}와 {sel_col2} 카이제곱 검정해줘")
                     add_bot_msg(f"**{sel_col1} × {sel_col2}** 카이제곱 검정을 실행할게요! 🔀", nav=False)
                     run_analysis(["stats", "chi2", sel_col1, sel_col2])
@@ -1035,7 +1113,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["stats", "paired"]:
             if len(num_cols) < 2:
                 st.warning("수치형 컬럼이 2개 이상 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_paired"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_paired"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1045,7 +1123,7 @@ elif st.session_state["authentication_status"]:
                 with c2:
                     opts2 = [c for c in num_cols if c != sel_col1]
                     sel_col2 = st.selectbox("후(After) 컬럼", opts2, key="paired_col2")
-                if st.button("✅ 전후 비교 시작", type="primary", key="btn_paired"):
+                if st.button("✅ 전후 비교 시작", type="primary", width="stretch", key="btn_paired"):
                     add_user_msg(f"{sel_col1}와 {sel_col2} 전후 비교해줘")
                     add_bot_msg(f"**{sel_col1} vs {sel_col2}** 전후 비교를 실행할게요! 🔄", nav=False)
                     run_analysis(["stats", "paired", sel_col1, sel_col2])
@@ -1055,7 +1133,7 @@ elif st.session_state["authentication_status"]:
         elif step == 2 and path == ["stats", "kruskal"]:
             if not num_cols or not cat_cols:
                 st.warning("수치형 컬럼과 범주형 컬럼이 모두 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_kruskal"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_kruskal"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1066,7 +1144,7 @@ elif st.session_state["authentication_status"]:
                     sel_col = st.selectbox("비교할 수치 컬럼", num_cols, index=col_default, key="kruskal_col")
                 with c2:
                     sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="kruskal_grp")
-                if st.button("✅ Kruskal-Wallis 시작", type="primary", key="btn_kruskal"):
+                if st.button("✅ Kruskal-Wallis 시작", type="primary", width="stretch", key="btn_kruskal"):
                     add_user_msg(f"{sel_col}을 {sel_group}으로 Kruskal-Wallis")
                     add_bot_msg(f"**{sel_group}별 {sel_col}** Kruskal-Wallis를 실행할게요! 📊", nav=False)
                     run_analysis(["stats", "kruskal", sel_col, sel_group])
@@ -1077,7 +1155,7 @@ elif st.session_state["authentication_status"]:
             all_cols_list = df.columns.tolist()
             if not cat_cols or len(all_cols_list) < 2:
                 st.warning("범주형 컬럼이 2개 이상 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_prop"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_prop"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1086,7 +1164,7 @@ elif st.session_state["authentication_status"]:
                     sel_col = st.selectbox("비율 비교할 컬럼", all_cols_list, key="prop_col")
                 with c2:
                     sel_group = st.selectbox("그룹 기준 컬럼", cat_cols, key="prop_grp")
-                if st.button("✅ 비율 비교 시작", type="primary", key="btn_prop"):
+                if st.button("✅ 비율 비교 시작", type="primary", width="stretch", key="btn_prop"):
                     add_user_msg(f"{sel_col}을 {sel_group}으로 비율 비교")
                     add_bot_msg(f"**{sel_group}별 {sel_col}** 비율을 비교할게요! 📊", nav=False)
                     run_analysis(["stats", "proportion", sel_col, sel_group])
@@ -1098,7 +1176,7 @@ elif st.session_state["authentication_status"]:
             binary_cols = [c for c in all_cols_list if df[c].nunique() == 2]
             if not binary_cols or len(num_cols) < 1:
                 st.warning("이진(2개 값) 컬럼과 수치형 컬럼이 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_logistic"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_logistic"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1108,7 +1186,7 @@ elif st.session_state["authentication_status"]:
                 x_opts = [c for c in num_cols if c != y_col]
                 x_cols = st.multiselect("사용할 변수 (X, 수치형)", x_opts,
                                         default=x_opts[:3] if len(x_opts) >= 3 else x_opts, key="log_x")
-                if x_cols and st.button("✅ 로지스틱 회귀 시작", type="primary", key="btn_logistic"):
+                if x_cols and st.button("✅ 로지스틱 회귀 시작", type="primary", width="stretch", key="btn_logistic"):
                     add_user_msg(f"{y_col} 로지스틱 회귀")
                     add_bot_msg(f"**{y_col}** 로지스틱 회귀를 실행할게요! 🎯", nav=False)
                     run_analysis(["stats", "logistic", y_col] + x_cols)
@@ -1119,7 +1197,7 @@ elif st.session_state["authentication_status"]:
             event_opts = [c for c in df.columns if set(df[c].dropna().unique()).issubset({0, 1, '0', '1', 0.0, 1.0})]
             if len(num_cols) < 1 or not event_opts:
                 st.warning("시간을 나타내는 수치형 컬럼과 0/1로 이루어진 이벤트 컬럼이 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_survival"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_survival"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1129,7 +1207,7 @@ elif st.session_state["authentication_status"]:
                 with c2:
                     event_col = st.selectbox("이벤트 컬럼 (0/1)", event_opts, key="surv_event")
                 group_col = st.selectbox("그룹 비교 (선택사항)", [None] + cat_cols, key="surv_group")
-                if st.button("✅ 생존분석 시작", type="primary", key="btn_survival"):
+                if st.button("✅ 생존분석 시작", type="primary", width="stretch", key="btn_survival"):
                     add_user_msg("생존분석")
                     add_bot_msg("Kaplan-Meier 생존분석을 실행할게요! ⏱️", nav=False)
                     path_args = ["stats", "survival", time_col, event_col]
@@ -1143,7 +1221,7 @@ elif st.session_state["authentication_status"]:
             event_opts = [c for c in df.columns if set(df[c].dropna().unique()).issubset({0, 1, '0', '1', 0.0, 1.0})]
             if len(num_cols) < 1 or not event_opts:
                 st.warning("시간을 나타내는 수치형 컬럼과 0/1로 이루어진 이벤트 컬럼이 필요해요!")
-                if st.button("🏠 홈으로 가기", width='stretch', key="warn_home_cox"):
+                if st.button("🏠 홈으로 가기", width="stretch", key="warn_home_cox"):
                     reset_tree()
                     st.rerun()
             else:
@@ -1155,7 +1233,7 @@ elif st.session_state["authentication_status"]:
                 x_opts = [c for c in num_cols if c not in [time_col, event_col]]
                 x_cols = st.multiselect("공변량 (분석 변수)", x_opts,
                                         default=x_opts[:3] if len(x_opts) >= 3 else x_opts, key="cox_x")
-                if x_cols and st.button("✅ Cox 회귀 시작", type="primary", key="btn_cox"):
+                if x_cols and st.button("✅ Cox 회귀 시작", type="primary", width="stretch", key="btn_cox"):
                     add_user_msg("Cox 회귀 분석")
                     add_bot_msg("Cox 비례위험 모델을 실행할게요! 📉", nav=False)
                     run_analysis(["stats", "cox", time_col, event_col] + x_cols)
@@ -1204,7 +1282,7 @@ elif st.session_state["authentication_status"]:
                             key="piv_interleave"
                         )
 
-                    if st.button("✅ 펼치기 시작", type="primary", key="btn_1n"):
+                    if st.button("✅ 펼치기 시작", type="primary", width="stretch", key="btn_1n"):
                         # 정렬 메시지 생성
                         sort_msg = ""
                         if sort_col != "정렬 안 함":
@@ -1271,7 +1349,7 @@ elif st.session_state["authentication_status"]:
                         key="cpiv_sort_dir"
                     )
 
-            if index_sel and val_sel and st.button("✅ 피벗 시작", type="primary", key="btn_cpiv"):
+            if index_sel and val_sel and st.button("✅ 피벗 시작", type="primary", width="stretch", key="btn_cpiv"):
                 sort_msg = ""
                 if sort_col != "정렬 안 함":
                     dir_label = "오름차순" if "오름차순" in sort_dir else "내림차순"
@@ -1354,7 +1432,7 @@ elif st.session_state["authentication_status"]:
                     st.caption(f"ℹ️ **{dep}**는 범주형 (고유값 {df[dep].nunique()}개)")
 
                 c_skip, c_next = st.columns(2)
-                if c_skip.button("⏭️ 건너뛰기", width='stretch', key="cfg_skip1"):
+                if c_skip.button("⏭️ 건너뛰기", width="stretch", key="cfg_skip1"):
                     st.session_state.config_step = 2
                     st.rerun()
                 if c_next.button("✅ 다음 단계로", type="primary",
@@ -1524,7 +1602,7 @@ elif st.session_state["authentication_status"]:
         if (st.session_state.result_section is not None
                 and st.session_state.tree_step == 1):
             st.divider()
-            if st.button("🏠 홈으로 가기", width='stretch', key="nav_home_bottom"):
+            if st.button("🏠 홈으로 가기", width="stretch", key="nav_home_bottom"):
                 add_user_msg("홈으로 가기")
                 add_bot_msg("처음으로 돌아왔어요! 어떤 분석을 해볼까요? 😊", nav=False)
                 reset_tree()  # 완전 리셋 → Level 0 (최상위 선택)
