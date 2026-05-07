@@ -287,19 +287,17 @@ elif st.session_state["authentication_status"]:
 
             # 전체 이미지 ZIP 저장
             import zipfile
-            figs_with_names = [
-                (item["fig"], item.get("sheet_name", f"차트_{i+1}"))
+            png_items = [
+                (item.get("png", b""), item.get("sheet_name", f"차트_{i+1}"))
                 for i, item in enumerate(st.session_state.export_buffer)
-                if item.get("fig") is not None
+                if item.get("fig") is not None and item.get("png")
             ]
-            if figs_with_names:
+            if png_items:
                 zip_buf = io.BytesIO()
                 with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for fig, name in figs_with_names:
-                        png_bytes = sf.export_chart_png(fig)
-                        if png_bytes:
-                            safe_name = re.sub(r'[\\/*?:"<>|]', '_', name)
-                            zf.writestr(f"{safe_name}.png", png_bytes)
+                    for png_bytes, name in png_items:
+                        safe_name = re.sub(r'[\\/*?:"<>|]', '_', name)
+                        zf.writestr(f"{safe_name}.png", png_bytes)
                 st.download_button(
                     "🖼️ 전체 분석 이미지 저장 (ZIP)",
                     data=zip_buf.getvalue(),
@@ -413,7 +411,7 @@ elif st.session_state["authentication_status"]:
         csv = sf.export_csv(result_df) if result_df is not None else ""
         excel = sf.export_single_excel(result_df, label[:31]) if result_df is not None else b""
         ed = {"excel": excel, "csv": csv, "png": png}
-        st.session_state.export_buffer.append({"sheet_name": label, "df": result_df, "fig": fig})
+        st.session_state.export_buffer.append({"sheet_name": label, "df": result_df, "fig": fig, "png": png})
         return ed
 
     def show_nav(back_path=None):
