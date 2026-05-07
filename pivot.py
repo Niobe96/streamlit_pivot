@@ -1150,26 +1150,77 @@ elif st.session_state["authentication_status"]:
                 n_counts = df.groupby(index_sel).size()
                 st.caption(f"📊 기준별 데이터 수: 최소 {n_counts.min()} / 최대 {int(n_counts.max())} / 평균 {n_counts.mean():.1f}")
                 values_sel = st.multiselect("펼칠 데이터 컬럼", remaining, key="piv_vals")
-                if values_sel and st.button("✅ 펼치기 시작", type="primary", key="btn_1n"):
-                    add_user_msg(f"{', '.join(index_sel)} 기준으로 {', '.join(values_sel)} 펼쳐줘")
-                    add_bot_msg("선택한 설정으로 데이터를 펼칠게요! 🎉", nav=False)
-                    with st.spinner("데이터를 처리하는 중이에요..."):
-                        try:
-                            result_df = perform_pivot(df, index_sel, values_sel,
-                                                       agg_func='first', classic_mode=False)
-                            buf = io.BytesIO()
-                            with pd.ExcelWriter(buf, engine='openpyxl') as w:
-                                result_df.reset_index().to_excel(w, sheet_name='Result', index=False)
-                            csv_data = result_df.reset_index().to_csv(index=False, encoding='utf-8-sig')
-                            add_bot_msg(
-                                f"✅ 완료! **{len(result_df):,}행 × {len(result_df.columns)}열** 결과예요 🎉",
-                                result_df=result_df.head(1000),
-                                export_data={"excel": buf.getvalue(), "csv": csv_data, "png": b""},
-                            )
-                        except Exception as e:
-                            add_bot_msg(f"❌ 오류가 발생했어요: {e}")
-                    reset_tree()
-                    st.rerun()
+
+                if values_sel:
+                    st.divider()
+                    st.markdown("##### ⚙️ 펼치기 옵션")
+
+                    # ── 정렬 옵션 ──
+                    sort_col_opts = ["정렬 안 함"] + remaining
+                    sc1, sc2 = st.columns(2)
+                    with sc1:
+                        sort_col = st.selectbox(
+                            "📋 정렬 기준 컬럼",
+                            sort_col_opts,
+                            help="펼치기 전에 각 그룹 내 데이터를 정렬합니다. 예: 날짜 기준 오름차순 → _1이 가장 오래된 날짜",
+                            key="piv_sort_col"
+                        )
+                    with sc2:
+                        sort_dir = st.selectbox(
+                            "↕️ 정렬 방향",
+                            ["오름차순 (작은 값 → 큰 값)", "내림차순 (큰 값 → 작은 값)"],
+                            key="piv_sort_dir"
+                        )
+
+                    # ── 인터리브 옵션 (펼칠 컬럼 2개 이상일 때) ──
+                    interleave = False
+                    if len(values_sel) >= 2:
+                        interleave = st.checkbox(
+                            "🔀 컬럼 순서 인터리브 (A_1, B_1, A_2, B_2 형식)",
+                            value=True,
+                            help="체크하면 같은 순번끼리 묶어서 배치해요. "
+                                 "해제하면 A_1, A_2, A_3, B_1, B_2, B_3 순으로 나와요.",
+                            key="piv_interleave"
+                        )
+
+                    if st.button("✅ 펼치기 시작", type="primary", key="btn_1n"):
+                        # 정렬 메시지 생성
+                        sort_msg = ""
+                        if sort_col != "정렬 안 함":
+                            dir_label = "오름차순" if "오름차순" in sort_dir else "내림차순"
+                            sort_msg = f" ({sort_col} {dir_label} 정렬)"
+
+                        add_user_msg(f"{', '.join(index_sel)} 기준으로 {', '.join(values_sel)} 펼쳐줘{sort_msg}")
+                        add_bot_msg("선택한 설정으로 데이터를 펼칠게요! 🎉", nav=False)
+                        with st.spinner("데이터를 처리하는 중이에요..."):
+                            try:
+                                # 정렬 적용
+                                pivot_source = df.copy()
+                                if sort_col != "정렬 안 함":
+                                    ascending = "오름차순" in sort_dir
+                                    pivot_source = pivot_source.sort_values(
+                                        by=index_sel + [sort_col],
+                                        ascending=[True]*len(index_sel) + [ascending]
+                                    ).reset_index(drop=True)
+
+                                result_df = perform_pivot(
+                                    pivot_source, index_sel, values_sel,
+                                    agg_func='first', sort_by_seq=interleave,
+                                    classic_mode=False
+                                )
+                                buf = io.BytesIO()
+                                with pd.ExcelWriter(buf, engine='openpyxl') as w:
+                                    result_df.reset_index().to_excel(w, sheet_name='Result', index=False)
+                                csv_data = result_df.reset_index().to_csv(index=False, encoding='utf-8-sig')
+                                add_bot_msg(
+                                    f"✅ 완료! **{len(result_df):,}행 × {len(result_df.columns)}열** 결과예요 🎉",
+                                    result_df=result_df.head(1000),
+                                    export_data={"excel": buf.getvalue(), "csv": csv_data, "png": b""},
+                                )
+                            except Exception as e:
+                                add_bot_msg(f"❌ 오류가 발생했어요: {e}")
+                        reset_tree()
+                        st.rerun()
 
         # ── LEVEL 2: pivot classic ────────────────────────────────
         elif step == 2 and path == ["pivot", "classic"]:
@@ -1179,12 +1230,42 @@ elif st.session_state["authentication_status"]:
             col_sel = st.selectbox("열 컬럼", [None] + all_cols, key="cpiv_col")
             val_sel = st.multiselect("값 컬럼 (숫자)", num_c, key="cpiv_val")
             agg = st.selectbox("집계 방법", ["sum", "mean", "count", "min", "max", "first"], key="cpiv_agg")
+
+            if index_sel and val_sel:
+                st.divider()
+                st.markdown("##### ⚙️ 정렬 옵션")
+                sort_col_opts = ["정렬 안 함"] + all_cols
+                sc1, sc2 = st.columns(2)
+                with sc1:
+                    sort_col = st.selectbox(
+                        "📋 정렬 기준 컬럼",
+                        sort_col_opts,
+                        help="피벗 전에 데이터를 정렬합니다.",
+                        key="cpiv_sort_col"
+                    )
+                with sc2:
+                    sort_dir = st.selectbox(
+                        "↕️ 정렬 방향",
+                        ["오름차순 (작은 값 → 큰 값)", "내림차순 (큰 값 → 작은 값)"],
+                        key="cpiv_sort_dir"
+                    )
+
             if index_sel and val_sel and st.button("✅ 피벗 시작", type="primary", key="btn_cpiv"):
-                add_user_msg(f"집계하여 요약 ({agg})")
+                sort_msg = ""
+                if sort_col != "정렬 안 함":
+                    dir_label = "오름차순" if "오름차순" in sort_dir else "내림차순"
+                    sort_msg = f" / {sort_col} {dir_label}"
+                add_user_msg(f"집계하여 요약 ({agg}{sort_msg})")
                 add_bot_msg(f"**{agg}** 방식으로 피벗을 실행할게요! 📊", nav=False)
                 with st.spinner("처리 중..."):
                     try:
-                        result_df = perform_pivot(df, index_sel, val_sel, agg_func=agg,
+                        pivot_source = df.copy()
+                        if sort_col != "정렬 안 함":
+                            ascending = "오름차순" in sort_dir
+                            pivot_source = pivot_source.sort_values(
+                                by=[sort_col], ascending=ascending
+                            ).reset_index(drop=True)
+                        result_df = perform_pivot(pivot_source, index_sel, val_sel, agg_func=agg,
                                                    classic_mode=True, columns_col=col_sel)
                         buf = io.BytesIO()
                         with pd.ExcelWriter(buf, engine='openpyxl') as w:
