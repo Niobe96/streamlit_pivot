@@ -1,0 +1,426 @@
+<style>
+    /* 게시판 내부에서만 적용되도록 클래스로 감싸기 */
+    .kcdw-tutorial-wrap {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+        color: #37352f;
+        line-height: 1.6;
+        background-color: #ffffff;
+        padding: 20px;
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .kcdw-tutorial-wrap h1 {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 24px;
+        border-bottom: 2px solid #2383e2;
+        padding-bottom: 10px;
+    }
+
+    .kcdw-tutorial-wrap h2 {
+        font-size: 24px;
+        font-weight: 600;
+        margin-top: 40px;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+    }
+
+    .kcdw-tutorial-wrap h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin-top: 24px;
+        margin-bottom: 12px;
+    }
+
+    .kcdw-tutorial-wrap p,
+    .kcdw-tutorial-wrap li {
+        font-size: 15px;
+        margin-bottom: 12px;
+        color: #37352f;
+    }
+
+    .kcdw-tutorial-wrap strong {
+        font-weight: 600;
+        color: #000;
+    }
+
+    .kcdw-tutorial-wrap hr {
+        border: 0;
+        height: 1px;
+        background: rgba(55, 53, 47, 0.09);
+        margin: 30px 0;
+    }
+
+    /* 사진 삽입 플레이스홀더 */
+    .kcdw-tutorial-wrap .image-placeholder {
+        width: 100%;
+        min-height: 200px;
+        background-color: #fafbfc;
+        border: 2px dashed #d0d7de;
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        margin: 20px 0;
+        padding: 30px;
+        color: #57606a;
+        text-align: center;
+    }
+
+    .kcdw-tutorial-wrap .image-placeholder img {
+        max-width: 100%;
+        border-radius: 8px;
+        border: 1px solid rgba(55, 53, 47, 0.09);
+        display: none;
+    }
+
+    .kcdw-tutorial-wrap .image-placeholder img[src]:not([src=""]) {
+        display: block;
+    }
+
+    .kcdw-tutorial-wrap .image-placeholder img[src]:not([src=""])~.placeholder-text {
+        display: none;
+    }
+
+    .kcdw-tutorial-wrap .placeholder-title {
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 5px;
+    }
+
+    .kcdw-tutorial-wrap .placeholder-desc {
+        font-size: 13px;
+        color: #6e7781;
+    }
+
+    /* 테이블 스타일 */
+    .kcdw-tutorial-wrap table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        font-size: 14px;
+        border: 1px solid rgba(55, 53, 47, 0.09);
+    }
+
+    .kcdw-tutorial-wrap th,
+    .kcdw-tutorial-wrap td {
+        padding: 10px 14px;
+        border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+        text-align: left;
+    }
+
+    .kcdw-tutorial-wrap th {
+        background-color: #f7f6f3;
+        font-weight: 600;
+    }
+
+    /* 강조 블록 (Callout) */
+    .kcdw-tutorial-wrap .callout {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 20px 0;
+        border-left: 4px solid #6c757d;
+    }
+
+    .kcdw-tutorial-wrap .callout.info {
+        border-left-color: #2383e2;
+        background-color: #f0f7ff;
+    }
+
+    .kcdw-tutorial-wrap .callout.warning {
+        border-left-color: #e5a000;
+        background-color: #fffaf0;
+    }
+
+    /* 인라인 코드 및 프리블록 */
+    .kcdw-tutorial-wrap code {
+        background-color: rgba(235, 87, 87, 0.1);
+        color: #eb5757;
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-family: 'Consolas', monospace;
+        font-size: 0.9em;
+    }
+
+    .kcdw-tutorial-wrap pre {
+        background-color: #f7f6f3;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid rgba(55, 53, 47, 0.09);
+        font-family: 'Consolas', monospace;
+        font-size: 13px;
+        overflow-x: auto;
+    }
+
+    .kcdw-tutorial-wrap pre code {
+        background-color: transparent;
+        color: #37352f;
+    }
+</style>
+
+<div class="kcdw-tutorial-wrap">
+    <h1>🏥 KCDW 데이터 분석 어시스턴트 가이드</h1>
+
+    <p>환영합니다! <strong>KCDW 데이터 분석 어시스턴트</strong>는 복잡한 코딩이나 통계 지식 없이도 누구나 쉽게 의료 데이터를 정제하고 심도 있게 분석할 수 있도록 돕는 <strong>대화형
+            분석 플랫폼</strong>입니다.</p>
+    <p>본 가이드에서는 처음 사용하시는 분들을 위해 <strong>앱 접속부터 최종 결과물 다운로드까지의 전체 흐름</strong>을 단계별로 안내합니다.</p>
+
+    <!-- 메인 화면 사진 플레이스홀더 -->
+    <div class="image-placeholder">
+        <img src="" alt="메인 화면 캡처">
+        <div class="placeholder-text">
+            <div style="font-size: 24px; margin-bottom: 10px;">🖼️</div>
+            <div class="placeholder-title">[사진 삽입 위치] 앱 접속 메인 화면 또는 환영 화면</div>
+            <div class="placeholder-desc">여기에 전체적인 UI가 보이는 홈 화면을 캡처하여 넣어주세요.</div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h2>1단계: 로그인 및 데이터 업로드</h2>
+
+    <h3>🔒 로그인</h3>
+    <p>앱에 처음 접속하면 로그인 화면이 나타납니다. 발급받은 <strong>아이디</strong>와 <strong>비밀번호</strong>를 입력하여 로그인합니다.</p>
+
+    <h3>📁 데이터 업로드</h3>
+    <ol>
+        <li>화면 왼쪽 사이드바에 있는 <strong>「📁 데이터 파일 업로드」</strong> 영역을 찾습니다.</li>
+        <li>분석하고자 하는 데이터 파일(<code>.csv</code> 또는 <code>.xlsx</code>)을 드래그 앤 드롭하거나 클릭하여 업로드합니다.</li>
+        <li>데이터가 성공적으로 업로드되면 <strong>자동 분석</strong>이 즉시 실행됩니다:
+            <ul>
+                <li>📋 총 행/열 개수, 수치형/범주형/날짜형 변수 목록</li>
+                <li>⚠️ 결측값이 있는 컬럼과 개수</li>
+                <li>📅 날짜 형식으로 보이는 컬럼의 자동 변환</li>
+                <li>💡 1:N 반복 구조 감지 (예: "환자ID 기준 평균 3.5행 반복")</li>
+            </ul>
+        </li>
+    </ol>
+
+    <div class="image-placeholder">
+        <img src="" alt="로그인 및 데이터 업로드 화면">
+        <div class="placeholder-text">
+            <div style="font-size: 24px; margin-bottom: 10px;">🖼️</div>
+            <div class="placeholder-title">[사진 삽입 위치] 로그인 영역 및 파일 업로드 화면</div>
+            <div class="placeholder-desc">사이드바의 파일 드래그 앤 드롭 영역과 업로드 후 자동 분석 요약이 나타난 화면을 캡처해 주세요.</div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h2>2단계: 초기 데이터 설정</h2>
+    <p>자동 분석이 끝나면, 본격적인 분석 전에 <strong>데이터의 기준을 설정</strong>하는 단계가 시작됩니다.</p>
+
+    <h3>① 환자 ID · 종속변수 지정</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>설정 항목</th>
+                <th>설명</th>
+                <th>예시</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>🆔 환자 ID 컬럼</strong></td>
+                <td>개인을 식별하는 고유 식별자. 설정하면 분석 변수에서 자동 제외됩니다.</td>
+                <td><code>Patient_ID</code>, <code>등록번호</code></td>
+            </tr>
+            <tr>
+                <td><strong>🎯 종속변수 컬럼</strong></td>
+                <td>분석의 목표(결과) 변수. 회귀분석 등에서 Y변수로 자동 선택됩니다.</td>
+                <td><code>발병여부</code>, <code>생존일수</code></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <ul>
+        <li>종속변수가 <strong>수치형이지만 실제로는 범주를 의미</strong>하는 경우(예: 0/1 코드), <strong>「🔄 범주형으로 변환」</strong> 체크박스를 활성화하세요.</li>
+        <li>설정이 끝나면 <strong>「✅ 다음 단계로」</strong> 를 클릭합니다. 나중에 설정하려면 <strong>「⏭️ 건너뛰기」</strong> 도 가능합니다.</li>
+    </ul>
+
+    <div class="image-placeholder">
+        <img src="" alt="환자 ID 및 종속변수 설정 화면">
+        <div class="placeholder-text">
+            <div style="font-size: 24px; margin-bottom: 10px;">🖼️</div>
+            <div class="placeholder-title">[사진 삽입 위치] 기준 변수 설정 화면</div>
+            <div class="placeholder-desc">환자 ID 및 종속변수를 드롭다운으로 선택하는 설정 창을 캡처해 주세요.</div>
+        </div>
+    </div>
+
+    <h3>② 데이터 타입 확인 · 변환</h3>
+    <p>각 컬럼의 데이터 타입을 확인하고 필요 시 변환하는 단계입니다.</p>
+
+    <ul>
+        <li><strong>💡 타입 변환 추천</strong>: 앱이 데이터를 자동으로 스캔하여 범주형으로 변환하면 유리한 컬럼을 추천합니다.
+            <ul>
+                <li><strong>「✨ 추천 모두 적용하기」</strong>: 추천된 변환을 한번에 일괄 적용</li>
+                <li>개별 추천 옆의 <strong>「🔄 변환」</strong>: 하나씩 선택적으로 적용</li>
+            </ul>
+        </li>
+        <li><strong>수동 타입 변환</strong>: 하단의 데이터 타입 표에서 <strong>행을 클릭</strong>하여 원하는 타입으로 직접 변경할 수 있습니다.
+            <ul>
+                <li>선택 가능한 타입: <code>수치형 (float)</code> · <code>정수형 (int)</code> · <code>문자형 (object)</code> ·
+                    <code>범주형 (category)</code> · <code>날짜형 (date)</code></li>
+            </ul>
+        </li>
+        <li><strong>↩️ 되돌리기</strong>: 잘못 변환했다면 변환 이력에서 <strong>↩️ 버튼</strong>을 눌러 원래 타입으로 복구할 수 있습니다.</li>
+        <li>모든 설정이 끝나면 <strong>「✅ 설정 완료 → 분석 시작!」</strong> 을 클릭합니다.</li>
+    </ul>
+
+    <div class="callout info">
+        <strong>💡 참고:</strong> 설정 완료 후에도 사이드바의 <strong>「⚙️ 설정 변경」</strong> 버튼으로 언제든지 돌아와서 수정할 수 있습니다.
+    </div>
+
+    <div class="image-placeholder">
+        <img src="" alt="데이터 타입 확인 및 변환 표 화면">
+        <div class="placeholder-text">
+            <div style="font-size: 24px; margin-bottom: 10px;">🖼️</div>
+            <div class="placeholder-title">[사진 삽입 위치] 데이터 타입 확인/변환 테이블</div>
+            <div class="placeholder-desc">추천 변환 알림창과 하단의 데이터 타입이 명시된 인터랙티브 표를 캡처해 주세요.</div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h2>3단계: 데이터 탐색 (기초 분석)</h2>
+    <p>메인 화면에서 <strong>「데이터 탐색」</strong> 버튼을 클릭하면 9가지 기초 분석 도구를 사용할 수 있습니다.</p>
+
+    <ul>
+        <li><strong>📊 분포 / 이상치 분석</strong>: 수치형 변수의 히스토그램과 박스플롯을 통해 분포와 이상치를 확인합니다. 선택하지 않으면 모든 수치형 컬럼을 분석합니다.</li>
+        <li><strong>🔗 상관관계 (피어슨)</strong>: 수치형 변수들 간의 피어슨 상관계수 히트맵을 자동 생성합니다.</li>
+        <li><strong>❓ 결측값 / 기술통계 분석</strong>: 막대 그래프로 결측값 현황을 보여주고 상세 기술통계(왜도·첨도)를 요약합니다.</li>
+        <li><strong>🔍 이상치 탐지</strong>: IQR(1.5×IQR)과 Z-score(|z|>3) 두 가지 방법으로 이상치를 정밀 탐지합니다.</li>
+        <li><strong>📂 빈도 분석</strong>: 범주형 변수의 빈도수와 비율을 막대 그래프 + 파이 차트로 시각화합니다.</li>
+        <li><strong>🔗 스피어만 상관분석</strong>: 순서형·비정규 데이터의 비선형 관계를 잡아내는 히트맵입니다.</li>
+        <li><strong>📊 산점도 행렬</strong>: 수치형 변수 모든 조합의 산점도를 행렬 형태로 제공합니다.</li>
+        <li><strong>📐 다중공선성 확인 (VIF)</strong>: 분산 팽창 인수(VIF)를 계산합니다. (VIF ≥ 10이면 변수 제거 권장)</li>
+        <li><strong>🎻 바이올린 플롯</strong>: 그룹별 데이터의 분포 형태와 박스플롯을 동시에 시각화합니다.</li>
+    </ul>
+
+    <div class="image-placeholder">
+        <img src="" alt="데이터 탐색 도구 모음 및 실행 화면">
+        <div class="placeholder-text">
+            <div style="font-size: 24px; margin-bottom: 10px;">🖼️</div>
+            <div class="placeholder-title">[사진 삽입 위치] 기초 데이터 탐색 화면</div>
+            <div class="placeholder-desc">데이터 탐색 메뉴 버튼들과 실제 히스토그램이나 히트맵이 출력된 결과 영역을 캡처해 주세요.</div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h2>4단계: 통계 검정 (고급 분석)</h2>
+    <p>메인 화면에서 <strong>「통계 검정」</strong> 버튼을 클릭하면 11가지 통계 분석 도구를 사용할 수 있습니다.</p>
+
+    <ul>
+        <li><strong>⚖️ 두 그룹 비교 (T-test)</strong>: 정규성을 자동 확인하여, 독립 t검정 또는 Mann-Whitney U검정을 자동 수행합니다.</li>
+        <li><strong>📊 여러 그룹 비교 (ANOVA)</strong>: 3개 이상 그룹 비교. Tukey 사후검정이 자동 실행됩니다.</li>
+        <li><strong>📈 영향 분석 (Regression)</strong>: 선형 회귀분석으로 변수가 목표값에 미치는 영향을 파악합니다.</li>
+        <li><strong>🔀 카이제곱 검정 (Chi-squared Test)</strong>: 범주형 변수 간의 독립성을 검정합니다. 교차표 포함.</li>
+        <li><strong>🔄 전후 비교 (Paired T-test)</strong>: 같은 대상의 전/후 수치 비교. 비정규 시 Wilcoxon 부호순위 검정으로 전환.</li>
+        <li><strong>📊 Kruskal-Wallis</strong>: ANOVA의 비모수 버전.</li>
+        <li><strong>📊 비율 비교 (Proportion Test)</strong>: 두 그룹 간 특정 값의 비율 차이를 검정합니다.</li>
+        <li><strong>🎯 로지스틱 회귀 (Logistic Regression)</strong>: 이진 결과를 예측하는 분석입니다.</li>
+        <li><strong>⏱️ 생존분석 (Kaplan-Meier)</strong>: 시간에 따른 생존 확률 곡선을 그립니다. Log-rank 검정도 지원.</li>
+        <li><strong>📉 Cox 회귀 분석 (Cox Regression)</strong>: 여러 변수가 생존에 미치는 영향을 분석하는 비례위험 모델 (위험비 HR 도출).</li>
+    </ul>
+
+    <div class="image-placeholder">
+        <img src="" alt="통계 검정 도구 및 결과 화면">
+        <div class="placeholder-text">
+            <div style="font-size: 24px; margin-bottom: 10px;">🖼️</div>
+            <div class="placeholder-title">[사진 삽입 위치] 고급 통계 분석 화면</div>
+            <div class="placeholder-desc">통계 검정 메뉴의 다양한 분석 도구 버튼들과, 실제 T-test나 회귀분석 결과 테이블이 나온 화면을 캡처해 주세요.</div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h2>5단계: 데이터 펼치기 (피벗 변환)</h2>
+    <p>메인 화면에서 <strong>「데이터 펼치기」</strong> 버튼을 클릭하면 2가지 피벗 모드를 사용할 수 있습니다.</p>
+
+    <h3>📋 1:N으로 펼치기</h3>
+    <p>한 환자가 여러 행에 걸쳐 반복된 데이터(예: 여러 번의 검사 기록)를 <strong>한 행으로 가로 정리</strong>합니다.</p>
+    <ul>
+        <li><strong>기준 컬럼</strong>: 같은 값끼리 묶을 컬럼 (예: 환자ID)</li>
+        <li><strong>펼칠 데이터 컬럼</strong>: 가로로 펼칠 컬럼들</li>
+        <li><strong>⚙️ 펼치기 옵션</strong>: 정렬 기준, 방향 설정 및 <strong>컬럼 순서 인터리브</strong>(같은 시점 데이터 나란히 묶기) 지원.</li>
+    </ul>
+
+    <h3>📊 집계하여 요약</h3>
+    <p>데이터를 <strong>sum · mean · count · min · max · first</strong> 등의 집계 함수로 요약하는 전통적인 피벗 테이블입니다.</p>
+
+    <div class="image-placeholder">
+        <img src="" alt="데이터 펼치기(피벗) 설정 화면">
+        <div class="placeholder-text">
+            <div style="font-size: 24px; margin-bottom: 10px;">🖼️</div>
+            <div class="placeholder-title">[사진 삽입 위치] 데이터 펼치기 및 피벗 창</div>
+            <div class="placeholder-desc">1:N 펼치기 옵션이나 집계 요약 피벗 테이블을 설정하는 인터페이스를 캡처해 주세요.</div>
+        </div>
+    </div>
+
+    <hr>
+
+    <h2>6단계: 결과 확인 및 내보내기</h2>
+
+    <h3>📝 대화형 결과 확인</h3>
+    <p>KCDW 어시스턴트는 <strong>챗봇 형식</strong>으로 동작합니다. 버튼을 눌러 분석을 지시할 때마다 화면 하단에 새로운 채팅과 함께 분석 결과(표, 그래프)가 자동 스크롤되어 나타납니다.
+        지나간 분석 기록은 스크롤을 올려 다시 볼 수 있습니다.</p>
+
+    <h3>📥 개별 결과 저장</h3>
+    <p>각 분석 결과 아래에 다음과 같은 다운로드 버튼이 제공됩니다:</p>
+    <ul>
+        <li><strong>📥 Excel 다운로드</strong> (<code>.xlsx</code>): 데이터 테이블을 엑셀로 저장</li>
+        <li><strong>📥 CSV 다운로드</strong> (<code>.csv</code>): 다른 프로그램에서 활용하기 위해 저장</li>
+        <li><strong>🖼️ PNG 이미지 저장</strong> (<code>.png</code>): 차트를 고화질 이미지로 저장 (보고서·논문 삽입용)</li>
+    </ul>
+
+    <h3>📋 전체 결과 일괄 저장</h3>
+    <p>여러 분석을 수행한 후, 사이드바에서 <strong>모든 결과를 한번에</strong> 내보낼 수 있습니다:</p>
+    <ul>
+        <li><strong>📋 전체 분석 Excel 저장</strong>: 모든 분석 결과 테이블을 <strong>다중 시트 Excel 파일</strong>로 한 번에 저장합니다.</li>
+        <li><strong>🖼️ 전체 분석 이미지 저장 (ZIP)</strong>: 모든 차트 이미지를 PNG로 묶어 ZIP 파일로 한 번에 저장합니다.</li>
+    </ul>
+
+    <div class="callout warning">
+        <strong>⚠️ PNG 저장이 안 되는 경우:</strong> <code>kaleido</code> 패키지가 설치되어 있지 않으면 이미지 버튼이 표시되지 않습니다. (서버 관리자 문의 필요)
+    </div>
+
+    <hr>
+
+    <h2>⚡ 사이드바 빠른 분석</h2>
+    <p>데이터 설정 완료 후 사이드바에 <strong>빠른 분석 바로가기</strong> 버튼들이 나타납니다. 메인 메뉴를 거치지 않고 한 번의 클릭으로 원하는 분석에 바로 진입할 수 있습니다.</p>
+
+    <ul>
+        <li>📊 분포 확인 | 🔗 상관관계 | ❓ 결측/요약 | ⚖️ 두 그룹 비교(T-test) | 📊 여러 그룹 비교(ANOVA) | 📈 회귀분석 | 📐 데이터 펼치기</li>
+    </ul>
+
+    <hr>
+
+    <h2>💡 유용한 팁</h2>
+
+    <h3>네비게이션</h3>
+    <ul>
+        <li><strong>「🏠 홈으로 가기」</strong>: 언제든 최상위 메뉴(데이터 탐색 / 통계 검정 / 데이터 펼치기)로 돌아갑니다.</li>
+        <li><strong>「🔁 다시 설정」</strong>: 현재 분석의 파라미터를 다시 선택할 수 있습니다.</li>
+        <li><strong>「⚙️ 설정 변경」</strong> (사이드바): 환자 ID, 종속변수, 데이터 타입 설정을 변경합니다.</li>
+    </ul>
+
+    <h3>종속변수 활용</h3>
+    <ul>
+        <li>종속변수를 설정하면 T-test, ANOVA, 회귀분석 등에서 <strong>비교 대상/목표 변수가 자동으로 선택</strong>되어 매번 찾아 선택할 필요가 없습니다.</li>
+    </ul>
+
+    <div class="callout warning">
+        <strong>🚨 주의사항</strong>
+        <ul>
+            <li>새 파일을 업로드하면 이전 분석 기록이 <strong>모두 초기화</strong>됩니다.</li>
+            <li>분석 결과는 세션 내에서만 유지되며, 브라우저를 닫거나 새로고침하면 사라집니다. 중요한 결과는 반드시 <strong>다운로드</strong>해 두세요.</li>
+            <li>대용량 데이터(수만 행 이상)의 경우 산점도 행렬, 생존분석 등의 처리에 다소 시간이 걸릴 수 있습니다.</li>
+        </ul>
+    </div>
+</div>
