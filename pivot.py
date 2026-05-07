@@ -284,6 +284,29 @@ elif st.session_state["authentication_status"]:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 width='stretch',
             )
+
+            # 전체 이미지 ZIP 저장
+            import zipfile
+            figs_with_names = [
+                (item["fig"], item.get("sheet_name", f"차트_{i+1}"))
+                for i, item in enumerate(st.session_state.export_buffer)
+                if item.get("fig") is not None
+            ]
+            if figs_with_names:
+                zip_buf = io.BytesIO()
+                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for fig, name in figs_with_names:
+                        png_bytes = sf.export_chart_png(fig)
+                        if png_bytes:
+                            safe_name = re.sub(r'[\\/*?:"<>|]', '_', name)
+                            zf.writestr(f"{safe_name}.png", png_bytes)
+                st.download_button(
+                    "🖼️ 전체 분석 이미지 저장 (ZIP)",
+                    data=zip_buf.getvalue(),
+                    file_name=f"전체분석_이미지_{ts()}.zip",
+                    mime="application/zip",
+                    width='stretch',
+                )
             st.divider()
 
         st.write(f"👤 **{st.session_state['name']}**님")
