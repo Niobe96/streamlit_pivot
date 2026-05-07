@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KCDW 데이터 분석 어시스턴트 사용 가이드</title>
+    <!-- 폰트 설정 (Inter 폰트 사용) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #37352f;
+            --sidebar-bg: #f7f6f3;
+            --border-color: rgba(55, 53, 47, 0.09);
+            --primary-color: #2383e2;
+            --hover-bg: rgba(55, 53, 47, 0.08);
+            --code-bg: #f7f6f3;
+            --callout-bg: #f8f9fa;
+            --accent-color: #0b6e99;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            display: flex;
+            background-color: var(--bg-color);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* 왼쪽 사이드바 목차 (고정) */
+        .sidebar {
+            width: 300px;
+            height: 100vh;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            position: fixed;
+            overflow-y: auto;
+            padding: 40px 24px;
+            box-sizing: border-box;
+        }
+
+        .sidebar-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(55, 53, 47, 0.6);
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toc-link {
+            display: block;
+            padding: 8px 12px;
+            color: var(--text-color);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 6px;
+            margin-bottom: 4px;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .toc-link:hover {
+            background-color: var(--hover-bg);
+            color: var(--accent-color);
+        }
+
+        .toc-link.sub {
+            padding-left: 28px;
+            font-size: 13px;
+            color: rgba(55, 53, 47, 0.7);
+            font-weight: 400;
+        }
+
+        /* 메인 콘텐츠 영역 */
+        .content {
+            margin-left: 300px;
+            padding: 64px 80px 100px 80px;
+            max-width: 900px;
+            box-sizing: border-box;
+            width: calc(100% - 300px);
+        }
+
+        /* 타이포그래피 */
+        h1 {
+            font-size: 40px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            letter-spacing: -0.03em;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h2 {
+            font-size: 28px;
+            font-weight: 600;
+            margin-top: 56px;
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+            letter-spacing: -0.02em;
+        }
+
+        h3 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        p {
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: rgba(55, 53, 47, 0.9);
+        }
+
+        strong {
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        hr {
+            border: 0;
+            height: 1px;
+            background: var(--border-color);
+            margin: 40px 0;
+        }
+
+        /* 사진 삽입 플레이스홀더 (사용자가 이미지를 넣을 위치) */
+        .image-placeholder {
+            width: 100%;
+            height: auto;
+            min-height: 300px;
+            background-color: #fafbfc;
+            border: 2px dashed #d0d7de;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 32px 0;
+            padding: 40px;
+            color: #57606a;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        .image-placeholder:hover {
+            background-color: #f6f8fa;
+            border-color: #babbbd;
+        }
+
+        .image-placeholder svg {
+            width: 48px;
+            height: 48px;
+            margin-bottom: 16px;
+            opacity: 0.6;
+            color: var(--primary-color);
+        }
+
+        /* 사용자가 이 src를 실제 이미지 경로로 수정하면 됩니다 */
+        .image-placeholder img {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid var(--border-color);
+            display: none;
+            /* 이미지가 없으면 숨김 */
+        }
+
+        /* img 태그에 src가 있으면 placeholder 텍스트를 숨기고 이미지를 보여줌 */
+        .image-placeholder img[src]:not([src=""]) {
+            display: block;
+        }
+
+        .image-placeholder img[src]:not([src=""])~.placeholder-text {
+            display: none;
+        }
+
+        .placeholder-text {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .placeholder-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-color);
+            margin-bottom: 8px;
+        }
+
+        .placeholder-desc {
+            font-size: 14px;
+            color: #6e7781;
+        }
+
+        /* 테이블 스타일 */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+            font-size: 14px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 0 1px var(--border-color);
+        }
+
+        th,
+        td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        th {
+            background-color: var(--sidebar-bg);
+            font-weight: 600;
+            color: rgba(55, 53, 47, 0.8);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: rgba(55, 53, 47, 0.03);
+        }
+
+        /* 강조 블록 (Callout) */
+        .callout {
+            background-color: var(--callout-bg);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin: 24px 0;
+            display: flex;
+            align-items: flex-start;
+            border-left: 4px solid #6c757d;
+        }
+
+        .callout.info {
+            border-left-color: var(--primary-color);
+            background-color: #f0f7ff;
+        }
+
+        .callout.warning {
+            border-left-color: #e5a000;
+            background-color: #fffaf0;
+        }
+
+        .callout-icon {
+            font-size: 20px;
+            margin-right: 16px;
+            line-height: 1.2;
+        }
+
+        .callout-content {
+            flex: 1;
+        }
+
+        .callout-content p {
+            margin: 0;
+            font-size: 15px;
+        }
+
+        /* 인라인 코드 */
+        code {
+            background-color: rgba(235, 87, 87, 0.1);
+            color: #eb5757;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+        }
+
+        /* 코드 블록 */
+        pre {
+            background-color: var(--code-bg);
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: var(--text-color);
+        }
+
+        /* 리스트 스타일 */
+        ul,
+        ol {
+            margin-top: 8px;
+            margin-bottom: 16px;
+            padding-left: 28px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            font-size: 16px;
+            color: rgba(55, 53, 47, 0.9);
+        }
+
+        li>ul,
+        li>ol {
+            margin-top: 8px;
+        }
+
+        /* 반응형 레이아웃 */
+        @media (max-width: 1024px) {
+            .sidebar {
+                display: none;
+            }
+
+            .content {
+                margin-left: 0;
+                width: 100%;
+                padding: 40px 24px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- 사이드바 목차 네비게이션 -->
+    <nav class="sidebar">
+        <div class="sidebar-title">📋 목차</div>
+        <a href="#intro" class="toc-link">시작하기</a>
+        <a href="#step1" class="toc-link">1단계: 로그인 및 데이터 업로드</a>
+        <a href="#step2" class="toc-link">2단계: 초기 데이터 설정</a>
+        <a href="#step2-1" class="toc-link sub">① 환자 ID · 종속변수 지정</a>
+        <a href="#step2-2" class="toc-link sub">② 데이터 타입 확인 · 변환</a>
+        <a href="#step3" class="toc-link">3단계: 데이터 탐색 (기초 분석)</a>
+        <a href="#step4" class="toc-link">4단계: 통계 검정 (고급 분석)</a>
+        <a href="#step5" class="toc-link">5단계: 데이터 펼치기 (피벗 변환)</a>
+        <a href="#step6" class="toc-link">6단계: 결과 확인 및 내보내기</a>
+        <a href="#sidebar-quick" class="toc-link">⚡ 사이드바 빠른 분석</a>
+        <a href="#tips" class="toc-link">💡 유용한 팁</a>
+    </nav>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="content">
+
+        <h1 id="intro">🏥 KCDW 데이터 분석 어시스턴트 가이드</h1>
+
+        <p>환영합니다! <strong>KCDW 데이터 분석 어시스턴트</strong>는 복잡한 코딩이나 통계 지식 없이도 누구나 쉽게 의료 데이터를 정제하고 심도 있게 분석할 수 있도록 돕는
+            <strong>대화형 분석 플랫폼</strong>입니다.
+        </p>
+        <p>본 가이드에서는 처음 사용하시는 분들을 위해 <strong>앱 접속부터 최종 결과물 다운로드까지의 전체 흐름</strong>을 단계별로 안내합니다.</p>
+
+        <!-- 메인 화면 사진 플레이스홀더 -->
+        <div class="image-placeholder">
+            <!-- 사용자는 아래 빈 src 안에 캡처본 이미지 경로를 넣으면 됩니다 (예: src="./img/main_screen.png") -->
+            <img src="" alt="메인 화면 캡처">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 앱 접속 메인 화면 또는 환영 화면</div>
+                <div class="placeholder-desc">여기에 전체적인 UI가 보이는 홈 화면을 캡처하여 넣어주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="step1">1단계: 로그인 및 데이터 업로드</h2>
+
+        <h3>🔒 로그인</h3>
+        <p>앱에 처음 접속하면 로그인 화면이 나타납니다. 발급받은 <strong>아이디</strong>와 <strong>비밀번호</strong>를 입력하여 로그인합니다.</p>
+
+        <h3>📁 데이터 업로드</h3>
+        <ol>
+            <li>화면 왼쪽 사이드바에 있는 <strong>「📁 데이터 파일 업로드」</strong> 영역을 찾습니다.</li>
+            <li>분석하고자 하는 데이터 파일(<code>.csv</code> 또는 <code>.xlsx</code>)을 드래그 앤 드롭하거나 클릭하여 업로드합니다.</li>
+            <li>데이터가 성공적으로 업로드되면 <strong>자동 분석</strong>이 즉시 실행됩니다:
+                <ul>
+                    <li>📋 총 행/열 개수, 수치형/범주형/날짜형 변수 목록</li>
+                    <li>⚠️ 결측값이 있는 컬럼과 개수</li>
+                    <li>📅 날짜 형식으로 보이는 컬럼의 자동 변환</li>
+                    <li>💡 1:N 반복 구조 감지 (예: "환자ID 기준 평균 3.5행 반복")</li>
+                </ul>
+            </li>
+        </ol>
+
+        <div class="image-placeholder">
+            <img src="" alt="로그인 및 데이터 업로드 화면">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 로그인 영역 및 파일 업로드 화면</div>
+                <div class="placeholder-desc">사이드바의 파일 드래그 앤 드롭 영역과 업로드 후 자동 분석 요약이 나타난 화면을 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="step2">2단계: 초기 데이터 설정</h2>
+        <p>자동 분석이 끝나면, 본격적인 분석 전에 <strong>데이터의 기준을 설정</strong>하는 단계가 시작됩니다.</p>
+
+        <h3 id="step2-1">① 환자 ID · 종속변수 지정</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>설정 항목</th>
+                    <th>설명</th>
+                    <th>예시</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>🆔 환자 ID 컬럼</strong></td>
+                    <td>개인을 식별하는 고유 식별자. 설정하면 분석 변수에서 자동 제외됩니다.</td>
+                    <td><code>Patient_ID</code>, <code>등록번호</code></td>
+                </tr>
+                <tr>
+                    <td><strong>🎯 종속변수 컬럼</strong></td>
+                    <td>분석의 목표(결과) 변수. 회귀분석 등에서 Y변수로 자동 선택됩니다.</td>
+                    <td><code>발병여부</code>, <code>생존일수</code></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <ul>
+            <li>종속변수가 <strong>수치형이지만 실제로는 범주를 의미</strong>하는 경우(예: 0/1 코드), <strong>「🔄 범주형으로 변환」</strong> 체크박스를 활성화하세요.
+            </li>
+            <li>설정이 끝나면 <strong>「✅ 다음 단계로」</strong> 를 클릭합니다. 나중에 설정하려면 <strong>「⏭️ 건너뛰기」</strong> 도 가능합니다.</li>
+        </ul>
+
+        <div class="image-placeholder">
+            <img src="" alt="환자 ID 및 종속변수 설정 화면">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 기준 변수 설정 화면</div>
+                <div class="placeholder-desc">환자 ID 및 종속변수를 드롭다운으로 선택하는 설정 창을 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <h3 id="step2-2">② 데이터 타입 확인 · 변환</h3>
+        <p>각 컬럼의 데이터 타입을 확인하고 필요 시 변환하는 단계입니다.</p>
+
+        <ul>
+            <li><strong>💡 타입 변환 추천</strong>: 앱이 데이터를 자동으로 스캔하여 범주형으로 변환하면 유리한 컬럼을 추천합니다.
+                <ul>
+                    <li><strong>「✨ 추천 모두 적용하기」</strong>: 추천된 변환을 한번에 일괄 적용</li>
+                    <li>개별 추천 옆의 <strong>「🔄 변환」</strong>: 하나씩 선택적으로 적용</li>
+                </ul>
+            </li>
+            <li><strong>수동 타입 변환</strong>: 하단의 데이터 타입 표에서 <strong>행을 클릭</strong>하여 원하는 타입으로 직접 변경할 수 있습니다.
+                <ul>
+                    <li>선택 가능한 타입: <code>수치형 (float)</code> · <code>정수형 (int)</code> · <code>문자형 (object)</code> ·
+                        <code>범주형 (category)</code> · <code>날짜형 (date)</code>
+                    </li>
+                </ul>
+            </li>
+            <li><strong>↩️ 되돌리기</strong>: 잘못 변환했다면 변환 이력에서 <strong>↩️ 버튼</strong>을 눌러 원래 타입으로 복구할 수 있습니다.</li>
+            <li>모든 설정이 끝나면 <strong>「✅ 설정 완료 → 분석 시작!」</strong> 을 클릭합니다.</li>
+        </ul>
+
+        <div class="callout info">
+            <div class="callout-icon">💡</div>
+            <div class="callout-content">
+                <p>설정 완료 후에도 사이드바의 <strong>「⚙️ 설정 변경」</strong> 버튼으로 언제든지 돌아와서 수정할 수 있습니다.</p>
+            </div>
+        </div>
+
+        <div class="image-placeholder">
+            <img src="" alt="데이터 타입 확인 및 변환 표 화면">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-3.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0118 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-3.75 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C5.496 8.25 6 7.746 6 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5m0-5.25v5.25m0-5.25C6 5.004 6.504 4.5 7.125 4.5h9.75c.621 0 1.125.504 1.125 1.125m1.125 2.625h1.5m-1.5 0A1.125 1.125 0 0118 7.125v-1.5m1.125 2.625c-.621 0-1.125.504-1.125 1.125v1.5m2.625-2.625c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M18 5.625v5.25m0-5.25C18 5.004 17.496 4.5 16.875 4.5H7.125M18 10.875V18.375m0-7.5c0-.621-.504-1.125-1.125-1.125H7.125c-.621 0-1.125.504-1.125 1.125m1.125 7.5v-7.5m10.5 7.5v-7.5m-9 0h7.5" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 데이터 타입 확인/변환 테이블</div>
+                <div class="placeholder-desc">추천 변환 알림창과 하단의 데이터 타입이 명시된 인터랙티브 표를 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="step3">3단계: 데이터 탐색 (기초 분석)</h2>
+        <p>메인 화면에서 <strong>「데이터 탐색」</strong> 버튼을 클릭하면 9가지 기초 분석 도구를 사용할 수 있습니다.</p>
+
+        <ul>
+            <li><strong>📊 분포 / 이상치 분석</strong>: 수치형 변수의 히스토그램과 박스플롯을 통해 분포와 이상치를 확인합니다. 선택하지 않으면 모든 수치형 컬럼을 분석합니다.</li>
+            <li><strong>🔗 상관관계 (피어슨)</strong>: 수치형 변수들 간의 피어슨 상관계수 히트맵을 자동 생성합니다.</li>
+            <li><strong>❓ 결측값 / 기술통계 분석</strong>: 막대 그래프로 결측값 현황을 보여주고 상세 기술통계(왜도·첨도)를 요약합니다.</li>
+            <li><strong>🔍 이상치 탐지</strong>: IQR(1.5×IQR)과 Z-score(|z|>3) 두 가지 방법으로 이상치를 정밀 탐지합니다.</li>
+            <li><strong>📂 빈도 분석</strong>: 범주형 변수의 빈도수와 비율을 막대 그래프 + 파이 차트로 시각화합니다.</li>
+            <li><strong>🔗 스피어만 상관분석</strong>: 순서형·비정규 데이터의 비선형 관계를 잡아내는 히트맵입니다.</li>
+            <li><strong>📊 산점도 행렬</strong>: 수치형 변수 모든 조합의 산점도를 행렬 형태로 제공합니다.</li>
+            <li><strong>📐 다중공선성 확인 (VIF)</strong>: 분산 팽창 인수(VIF)를 계산합니다. (VIF ≥ 10이면 변수 제거 권장)</li>
+            <li><strong>🎻 바이올린 플롯</strong>: 그룹별 데이터의 분포 형태와 박스플롯을 동시에 시각화합니다.</li>
+        </ul>
+
+        <div class="image-placeholder">
+            <img src="" alt="데이터 탐색 도구 모음 및 실행 화면">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 기초 데이터 탐색 화면</div>
+                <div class="placeholder-desc">데이터 탐색 메뉴 버튼들과 실제 히스토그램이나 히트맵이 출력된 결과 영역을 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="step4">4단계: 통계 검정 (고급 분석)</h2>
+        <p>메인 화면에서 <strong>「통계 검정」</strong> 버튼을 클릭하면 11가지 통계 분석 도구를 사용할 수 있습니다.</p>
+
+        <ul>
+            <li><strong>⚖️ 두 그룹 비교 (T-test)</strong>: 정규성을 자동 확인하여, 독립 t검정 또는 Mann-Whitney U검정을 자동 수행합니다.</li>
+            <li><strong>📊 여러 그룹 비교 (ANOVA)</strong>: 3개 이상 그룹 비교. Tukey 사후검정이 자동 실행됩니다.</li>
+            <li><strong>📈 영향 분석 (Regression)</strong>: 선형 회귀분석으로 변수가 목표값에 미치는 영향을 파악합니다.</li>
+            <li><strong>🔀 카이제곱 검정 (Chi-squared Test)</strong>: 범주형 변수 간의 독립성을 검정합니다. 교차표 포함.</li>
+            <li><strong>🔄 전후 비교 (Paired T-test)</strong>: 같은 대상의 전/후 수치 비교. 비정규 시 Wilcoxon 부호순위 검정으로 전환.</li>
+            <li><strong>📊 Kruskal-Wallis</strong>: ANOVA의 비모수 버전.</li>
+            <li><strong>📊 비율 비교 (Proportion Test)</strong>: 두 그룹 간 특정 값의 비율 차이를 검정합니다.</li>
+            <li><strong>🎯 로지스틱 회귀 (Logistic Regression)</strong>: 이진 결과를 예측하는 분석입니다.</li>
+            <li><strong>⏱️ 생존분석 (Kaplan-Meier)</strong>: 시간에 따른 생존 확률 곡선을 그립니다. Log-rank 검정도 지원.</li>
+            <li><strong>📉 Cox 회귀 분석 (Cox Regression)</strong>: 여러 변수가 생존에 미치는 영향을 분석하는 비례위험 모델 (위험비 HR 도출).</li>
+        </ul>
+
+        <div class="image-placeholder">
+            <img src="" alt="통계 검정 도구 및 결과 화면">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 고급 통계 분석 화면</div>
+                <div class="placeholder-desc">통계 검정 메뉴의 다양한 분석 도구 버튼들과, 실제 T-test나 회귀분석 결과 테이블이 나온 화면을 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="step5">5단계: 데이터 펼치기 (피벗 변환)</h2>
+        <p>메인 화면에서 <strong>「데이터 펼치기」</strong> 버튼을 클릭하면 2가지 피벗 모드를 사용할 수 있습니다.</p>
+
+        <h3>📋 1:N으로 펼치기</h3>
+        <p>한 환자가 여러 행에 걸쳐 반복된 데이터(예: 여러 번의 검사 기록)를 <strong>한 행으로 가로 정리</strong>합니다.</p>
+
+        <ul>
+            <li><strong>기준 컬럼</strong>: 같은 값끼리 묶을 컬럼 (예: 환자ID)</li>
+            <li><strong>펼칠 데이터 컬럼</strong>: 가로로 펼칠 컬럼들</li>
+            <li><strong>⚙️ 펼치기 옵션</strong>: 정렬 기준, 방향 설정 및 <strong>컬럼 순서 인터리브</strong>(같은 시점 데이터 나란히 묶기) 지원.</li>
+        </ul>
+
+        <h3>📊 집계하여 요약</h3>
+        <p>데이터를 <strong>sum · mean · count · min · max · first</strong> 등의 집계 함수로 요약하는 전통적인 피벗 테이블입니다.</p>
+
+        <div class="image-placeholder">
+            <img src="" alt="데이터 펼치기(피벗) 설정 화면">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 데이터 펼치기 및 피벗 창</div>
+                <div class="placeholder-desc">1:N 펼치기 옵션이나 집계 요약 피벗 테이블을 설정하는 인터페이스를 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="step6">6단계: 결과 확인 및 내보내기</h2>
+
+        <h3>📝 대화형 결과 확인</h3>
+        <p>KCDW 어시스턴트는 <strong>챗봇 형식</strong>으로 동작합니다. 버튼을 눌러 분석을 지시할 때마다 화면 하단에 새로운 채팅과 함께 분석 결과(표, 그래프)가 자동 스크롤되어
+            나타납니다. 지나간 분석 기록은 스크롤을 올려 다시 볼 수 있습니다.</p>
+
+        <h3>📥 개별 결과 저장</h3>
+        <p>각 분석 결과 아래에 다음과 같은 다운로드 버튼이 제공됩니다:</p>
+        <ul>
+            <li><strong>📥 Excel 다운로드</strong> (<code>.xlsx</code>): 데이터 테이블을 엑셀로 저장</li>
+            <li><strong>📥 CSV 다운로드</strong> (<code>.csv</code>): 다른 프로그램에서 활용하기 위해 저장</li>
+            <li><strong>🖼️ PNG 이미지 저장</strong> (<code>.png</code>): 차트를 고화질 이미지로 저장 (보고서·논문 삽입용)</li>
+        </ul>
+
+        <h3>📋 전체 결과 일괄 저장</h3>
+        <p>여러 분석을 수행한 후, 사이드바에서 <strong>모든 결과를 한번에</strong> 내보낼 수 있습니다:</p>
+        <ul>
+            <li><strong>📋 전체 분석 Excel 저장</strong>: 모든 분석 결과 테이블을 <strong>다중 시트 Excel 파일</strong>로 한 번에 저장합니다.</li>
+            <li><strong>🖼️ 전체 분석 이미지 저장 (ZIP)</strong>: 모든 차트 이미지를 PNG로 묶어 ZIP 파일로 한 번에 저장합니다.</li>
+        </ul>
+
+        <div class="callout warning">
+            <div class="callout-icon">⚠️</div>
+            <div class="callout-content">
+                <p><strong>PNG 저장이 안 되는 경우:</strong> <code>kaleido</code> 패키지가 설치되어 있지 않으면 이미지 버튼이 표시되지 않습니다. 터미널에서
+                    <code>pip install kaleido==0.2.1</code> 로 설치해 주세요.
+                </p>
+            </div>
+        </div>
+
+        <div class="image-placeholder">
+            <img src="" alt="결과 다운로드 및 일괄 저장 화면">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 다운로드 버튼들 화면</div>
+                <div class="placeholder-desc">분석 결과 하단의 개별 다운로드 버튼과 사이드바의 일괄 저장 버튼 영역을 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="sidebar-quick">⚡ 사이드바 빠른 분석</h2>
+        <p>데이터 설정 완료 후 사이드바에 <strong>빠른 분석 바로가기</strong> 버튼들이 나타납니다. 메인 메뉴를 거치지 않고 한 번의 클릭으로 원하는 분석에 바로 진입할 수 있습니다.</p>
+
+        <ul>
+            <li>📊 분포 확인</li>
+            <li>🔗 상관관계</li>
+            <li>❓ 결측/요약</li>
+            <li>⚖️ 두 그룹 비교(T-test)</li>
+            <li>📊 여러 그룹 비교(ANOVA)</li>
+            <li>📈 회귀분석</li>
+            <li>📐 데이터 펼치기</li>
+        </ul>
+
+        <div class="image-placeholder">
+            <img src="" alt="사이드바 빠른 분석 메뉴">
+            <div class="placeholder-text">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+                <div class="placeholder-title">[사진 삽입 위치] 사이드바 빠른 분석 버튼</div>
+                <div class="placeholder-desc">사이드바 하단에 생성되는 바로가기 버튼 목록을 캡처해 주세요.</div>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2 id="tips">💡 유용한 팁</h2>
+
+        <h3>네비게이션</h3>
+        <ul>
+            <li><strong>「🏠 홈으로 가기」</strong>: 언제든 최상위 메뉴(데이터 탐색 / 통계 검정 / 데이터 펼치기)로 돌아갑니다.</li>
+            <li><strong>「🔁 다시 설정」</strong>: 현재 분석의 파라미터를 다시 선택할 수 있습니다.</li>
+            <li><strong>「⚙️ 설정 변경」</strong> (사이드바): 환자 ID, 종속변수, 데이터 타입 설정을 변경합니다.</li>
+        </ul>
+
+        <h3>종속변수 활용</h3>
+        <ul>
+            <li>종속변수를 설정하면 T-test, ANOVA, 회귀분석 등에서 <strong>비교 대상/목표 변수가 자동으로 선택</strong>되어 매번 찾아 선택할 필요가 없습니다.</li>
+            <li>종속변수는 분석의 편의를 위한 기본값 설정 용도이며, 실행 시 언제든 다른 컬럼으로 변경할 수 있습니다.</li>
+        </ul>
+
+        <h3>전체 분석 워크플로우 예시</h3>
+        <pre><code>1. 데이터 업로드 (CSV/Excel)
+2. 환자 ID · 종속변수 설정
+3. 데이터 타입 최적화 (추천 적용)
+4. 데이터 탐색 → 분포 확인, 결측값 체크
+5. 통계 검정 → T-test, ANOVA 등 수행
+6. 전체 분석 Excel 저장 + 이미지 ZIP 저장</code></pre>
+
+        <div class="callout warning">
+            <div class="callout-icon">🚨</div>
+            <div class="callout-content">
+                <p><strong>주의사항</strong></p>
+                <ul>
+                    <li>새 파일을 업로드하면 이전 분석 기록이 <strong>모두 초기화</strong>됩니다.</li>
+                    <li>분석 결과는 세션 내에서만 유지되며, 브라우저를 닫거나 새로고침하면 사라집니다. 중요한 결과는 반드시 <strong>다운로드</strong>해 두세요.</li>
+                    <li>대용량 데이터(수만 행 이상)의 경우 산점도 행렬, 생존분석 등의 처리에 다소 시간이 걸릴 수 있습니다.</li>
+                </ul>
+            </div>
+        </div>
+
+        <p
+            style="text-align: center; font-size: 20px; font-weight: 600; margin-top: 64px; color: var(--primary-color);">
+            지금 바로 파일을 업로드하고 첫 번째 분석을 시작해 보세요! 🎉
+        </p>
+
+    </main>
+
+</body>
+
+</html>
