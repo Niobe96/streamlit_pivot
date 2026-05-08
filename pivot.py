@@ -401,18 +401,26 @@ elif st.session_state["authentication_status"]:
     # ── 가이드 다이얼로그 (사이드바 밖에서 표시) ──────────────────
     import os
 
-    @st.dialog("📖 가이드", width="large")
-    def show_tutorial_dialog():
+    @st.cache_data
+    def _load_tutorial_html():
+        """가이드 HTML을 캐싱하여 매번 디스크 I/O를 방지한다."""
         html_path = "KCDW_Tutorial.html"
         md_path = "KCDW_Tutorial.md"
-
         if os.path.exists(html_path):
             with open(html_path, "r", encoding="utf-8") as f:
-                html_data = f.read()
-            components.html(html_data, height=750, scrolling=True)
+                return ("html", f.read())
         elif os.path.exists(md_path):
             with open(md_path, "r", encoding="utf-8") as f:
-                st.markdown(f.read(), unsafe_allow_html=True)
+                return ("md", f.read())
+        return (None, None)
+
+    @st.dialog("📖 가이드", width="large")
+    def show_tutorial_dialog():
+        fmt, data = _load_tutorial_html()
+        if fmt == "html":
+            components.html(data, height=750, scrolling=True)
+        elif fmt == "md":
+            st.markdown(data, unsafe_allow_html=True)
         else:
             st.error("튜토리얼 파일을 찾을 수 없습니다.")
 
