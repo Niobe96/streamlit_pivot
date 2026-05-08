@@ -271,17 +271,23 @@ elif st.session_state["authentication_status"]:
     # ── 사이드바 ──────────────────────────────────────────────────
     with st.sidebar:
 
+        # 가이드 선택 시 즉시 "데이터 관리"(인덱스 0)로 복귀 + 팝업 플래그
+        _show_guide = st.session_state.pop("_show_guide_dialog", False)
+        _manual = st.session_state.pop("_guide_reset", None)
+
         selected_menu = option_menu(
             menu_title=None,
-            options=["데이터 관리", "빠른 분석", "내보내기"],
-            icons=["database", "lightning", "download"],
+            options=["데이터 관리", "빠른 분석", "내보내기", "가이드"],
+            icons=["database", "lightning", "download", "book"],
             menu_icon="cast",
             default_index=0,
+            manual_select=_manual,
+            key="sidebar_menu",
         )
         # st.divider()
 
         if selected_menu == "데이터 관리":
-            uploaded = st.file_uploader("", type=['csv', 'xlsx'])
+            uploaded = st.file_uploader("데이터 파일 업로드", type=['csv', 'xlsx'], label_visibility="collapsed")
             if uploaded:
                 load_file(uploaded)
 
@@ -381,12 +387,37 @@ elif st.session_state["authentication_status"]:
             else:
                 st.info("내보낼 분석 결과가 없습니다.")
 
-        # st.divider()
+        elif selected_menu == "가이드":
+            # 즉시 "데이터 관리"(인덱스 0)로 전환 + 다이얼로그 표시 플래그
+            st.session_state["_guide_reset"] = 0
+            st.session_state["_show_guide_dialog"] = True
+            st.rerun()
 
         st.markdown(f"<div style=' margin-bottom: 10px; color: #334155;'>👤 <b>{st.session_state['name']}</b>님</div>", unsafe_allow_html=True)
         c_empty, c_btn = st.columns([1, 1])
         with c_btn:
             authenticator.logout('로그아웃')
+
+    # ── 가이드 다이얼로그 (사이드바 밖에서 표시) ──────────────────
+    import os
+
+    @st.dialog("📖 가이드", width="large")
+    def show_tutorial_dialog():
+        html_path = "KCDW_Tutorial.html"
+        md_path = "KCDW_Tutorial.md"
+
+        if os.path.exists(html_path):
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_data = f.read()
+            components.html(html_data, height=750, scrolling=True)
+        elif os.path.exists(md_path):
+            with open(md_path, "r", encoding="utf-8") as f:
+                st.markdown(f.read(), unsafe_allow_html=True)
+        else:
+            st.error("튜토리얼 파일을 찾을 수 없습니다.")
+
+    if _show_guide:
+        show_tutorial_dialog()
 
     # ── 메인 영역 ─────────────────────────────────────────────────
     df = st.session_state.df
