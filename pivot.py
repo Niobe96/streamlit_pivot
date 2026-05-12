@@ -15,7 +15,7 @@ from streamlit_option_menu import option_menu
 # =============================================================================
 def perform_pivot(source_df, index_cols, values_col, agg_func='first',
                   max_n=None, sort_by_seq=False, custom_prefix=None,
-                  classic_mode=False, columns_col=None):
+                  classic_mode=False, columns_col=None, interleave_groups=None):
     needed_cols = list(set(index_cols + values_col + ([columns_col] if columns_col else [])))
     temp_df = source_df[needed_cols].copy()
     for col in index_cols:
@@ -60,11 +60,38 @@ def perform_pivot(source_df, index_cols, values_col, agg_func='first',
             prefix = prefix_map.get(val_name, val_name)
             pivot_df.columns = [f"{prefix}_{col}" for col in pivot_df.columns]
     if sort_by_seq and not classic_mode and len(values_col) > 1:
-        def col_sort_key(col_name):
+        # interleave_groups: [[A, B], [C, D]] 형식의 리스트
+        # 결과 순서: A_1, B_1, A_2, B_2, ..., C_1, D_1, C_2, D_2, ...
+        
+        # 그룹 정보가 없으면 전체를 하나의 그룹으로 처리 (기존 방식)
+        if not interleave_groups:
+            interleave_groups = [values_col]
+
+        # 정렬을 위한 맵 생성
+        group_map = {}
+        order_map = {}
+        for g_idx, grp in enumerate(interleave_groups):
+            for c_idx, col in enumerate(grp):
+                group_map[col] = g_idx
+                order_map[col] = c_idx
+
+        def col_sort_key_grouped(col_name):
             match = re.search(r'_(\d+)$', col_name)
             seq = int(match.group(1)) if match else 0
-            return (seq, col_name)
-        pivot_df = pivot_df[sorted(pivot_df.columns, key=col_sort_key)]
+            
+            # prefix_map(커스텀 접두어)을 고려하여 원본 컬럼명 찾기
+            original = None
+            for orig, pref in prefix_map.items():
+                if col_name.startswith(pref + '_'):
+                    original = orig
+                    break
+            
+            # 그룹 번호, 시퀀스, 그룹 내 순서 반환
+            g_idx = group_map.get(original, 999)
+            c_idx = order_map.get(original, 999)
+            return (g_idx, seq, c_idx)
+
+        pivot_df = pivot_df[sorted(pivot_df.columns, key=col_sort_key_grouped)]
     pivot_df_reset = pivot_df.reset_index()
     unique_indices = temp_df[index_cols].drop_duplicates()
     final_df = pd.merge(unique_indices, pivot_df_reset, on=index_cols, how='left')
@@ -1312,14 +1339,55 @@ elif st.session_state["authentication_status"]:
 
                     # ── 인터리브 옵션 (펼칠 컬럼 2개 이상일 때) ──
                     interleave = False
+                    interleave_groups = None
                     if len(values_sel) >= 2:
                         interleave = st.checkbox(
                             "🔀 컬럼 순서 인터리브 (A_1, B_1, A_2, B_2 형식)",
-                            value=True,
+                            value=False ,
                             help="체크하면 같은 순번끼리 묶어서 배치해요. "
                                  "해제하면 A_1, A_2, A_3, B_1, B_2, B_3 순으로 나와요.",
                             key="piv_interleave"
                         )
+                        if interleave:
+                            mode = st.radio("인터리브 방식", ["묶음 크기로 자동 지정", "그룹 직접 지정"], horizontal=True, key="piv_inter_mode")
+                            
+                            if mode == "묶음 크기로 자동 지정":
+                                g_size = st.number_input("📦 묶음 크기", min_value=1, max_value=len(values_sel), value=len(values_sel), step=1, key="piv_g_size")
+                                interleave_groups = [values_sel[i:i+g_size] for i in range(0, len(values_sel), g_size)]
+                            else:
+                                st.caption("💡 각 컬럼이 속할 그룹 번호와 그룹 내 순서를 지정하세요.")
+                                group_data = pd.DataFrame({
+                                    "컬럼": values_sel,
+                                    "그룹": [1] * len(values_sel),
+                                    "순서": list(range(1, len(values_sel) + 1))
+                                })
+                                edited_df = st.data_editor(
+                                    group_data,
+                                    column_config={
+                                        "컬럼": st.column_config.TextColumn("컬럼", disabled=True),
+                                        "그룹": st.column_config.NumberColumn("그룹", min_value=1, step=1),
+                                        "순서": st.column_config.NumberColumn("순서", min_value=1, step=1),
+                                    },
+                                    hide_index=True,
+                                    use_container_width=True,
+                                    key="piv_group_editor"
+                                )
+                                # 그룹화 로직
+                                g_dict = {}
+                                for _, row in edited_df.sort_values(["그룹", "순서"]).iterrows():
+                                    gn = row["그룹"]
+                                    if gn not in g_dict: g_dict[gn] = []
+                                    g_dict[gn].append(row["컬럼"])
+                                interleave_groups = [g_dict[k] for k in sorted(g_dict.keys())]
+
+                            # 미리보기
+                            if interleave_groups:
+                                groups_preview = [" + ".join(g) for g in interleave_groups]
+                                st.markdown(
+                                    f"<div style='font-size:1.0rem; color:#475569; margin-top:1px; margin-bottom:8px'>"
+                                    f"📋 <b>그룹 구성:</b> {' | '.join(f'[{gp}]' for gp in groups_preview)}</div>",
+                                    unsafe_allow_html=True
+                                )
 
                     if st.button("✅ 펼치기 시작", type="primary", width="stretch", key="btn_1n"):
                         # 정렬 메시지 생성
@@ -1344,7 +1412,8 @@ elif st.session_state["authentication_status"]:
                                 result_df = perform_pivot(
                                     pivot_source, index_sel, values_sel,
                                     agg_func='first', sort_by_seq=interleave,
-                                    classic_mode=False
+                                    classic_mode=False,
+                                    interleave_groups=interleave_groups
                                 )
                                 buf = io.BytesIO()
                                 with pd.ExcelWriter(buf, engine='openpyxl') as w:
