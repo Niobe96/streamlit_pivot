@@ -8,7 +8,7 @@ import traceback
 import time
 import streamlit_authenticator as stauth
 import stats_functions as sf
-from streamlit_option_menu import option_menu
+from pathlib import Path
 
 # =============================================================================
 # 핵심 로직: perform_pivot (변경 없음)
@@ -148,6 +148,30 @@ st.markdown("""
         font-size: 0.85rem !important;
         color: #475569 !important;
     }
+
+    /* Sidebar native navigation */
+    section[data-testid="stSidebar"] div[class*="st-key-nav_"] {
+        margin-bottom: 6px;
+    }
+
+    section[data-testid="stSidebar"] div[class*="st-key-nav_"] button {
+        min-height: 42px;
+        width: 100%;
+        justify-content: flex-start;
+        padding: 0 14px !important;
+        border-radius: 9px !important;
+        font-size: 0.94rem !important;
+        font-weight: 700 !important;
+        text-align: left !important;
+        white-space: nowrap;
+    }
+
+    section[data-testid="stSidebar"] div[class*="st-key-nav_"] button p {
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -211,6 +235,8 @@ elif st.session_state["authentication_status"]:
         'pending_intent': None,
         'pending_col': None,
         'pending_group': None,
+        '_guide_reset': None,
+        '_show_guide_dialog': False,
     }
     for k, v in _defaults.items():
         if k not in st.session_state:
@@ -299,18 +325,41 @@ elif st.session_state["authentication_status"]:
     with st.sidebar:
 
         # 가이드 선택 시 즉시 "데이터 관리"(인덱스 0)로 복귀 + 팝업 플래그
-        _show_guide = st.session_state.pop("_show_guide_dialog", False)
-        _manual = st.session_state.pop("_guide_reset", None)
+        _show_guide = st.session_state.get("_show_guide_dialog", False)
+        _manual = st.session_state.get("_guide_reset", None)
 
-        selected_menu = option_menu(
-            menu_title=None,
-            options=["데이터 관리", "빠른 분석", "내보내기", "가이드"],
-            icons=["database", "lightning", "download", "book"],
-            menu_icon="cast",
-            default_index=0,
-            manual_select=_manual,
-            key="sidebar_menu",
-        )
+        menu_options = ["데이터 관리", "빠른 분석", "내보내기", "가이드"]
+        menu_labels = {
+            "데이터 관리": "▦  데이터 관리",
+            "빠른 분석": "🎢  빠른 분석",
+            "내보내기": "⬇  내보내기",
+            "가이드": "📖  가이드",
+        }
+        menu_keys = {
+            "데이터 관리": "nav_data",
+            "빠른 분석": "nav_quick",
+            "내보내기": "nav_export",
+            "가이드": "nav_guide",
+        }
+        if "sidebar_menu" not in st.session_state:
+            st.session_state["sidebar_menu"] = menu_options[0]
+        if _manual is not None:
+            st.session_state["sidebar_menu"] = menu_options[_manual]
+
+        selected_menu = st.session_state["sidebar_menu"]
+        for menu in menu_options:
+            if st.button(
+                menu_labels[menu],
+                key=menu_keys[menu],
+                type="primary" if selected_menu == menu else "secondary",
+                use_container_width=True,
+            ):
+                selected_menu = menu
+                st.session_state["sidebar_menu"] = menu
+                st.rerun()
+        # manual_select 사용 후 즉시 초기화 (다음 클릭 시 재감지 가능하도록)
+        if _manual is not None:
+            st.session_state["_guide_reset"] = None
         # st.divider()
 
         if selected_menu == "데이터 관리":
@@ -426,26 +475,36 @@ elif st.session_state["authentication_status"]:
             authenticator.logout('로그아웃')
 
     # ── 가이드 다이얼로그 (사이드바 밖에서 표시) ──────────────────
-    import os
+    def _get_tutorial_file():
+        guide_dir = Path(__file__).resolve().parent
+        html_path = guide_dir / "KCDW_Tutorial.html"
+        md_path = guide_dir / "KCDW_Tutorial.md"
+        if html_path.exists():
+            return "html", str(html_path), html_path.stat().st_mtime_ns
+        if md_path.exists():
+            return "md", str(md_path), md_path.stat().st_mtime_ns
+        return None, None, None
 
-    @st.cache_data
-    def _load_tutorial_html():
+    @st.cache_data(show_spinner=False)
+    def _load_tutorial_html(fmt, path_str, mtime_ns):
         """가이드 HTML을 캐싱하여 매번 디스크 I/O를 방지한다."""
-        html_path = "KCDW_Tutorial.html"
-        md_path = "KCDW_Tutorial.md"
-        if os.path.exists(html_path):
-            with open(html_path, "r", encoding="utf-8") as f:
-                return ("html", f.read())
-        elif os.path.exists(md_path):
-            with open(md_path, "r", encoding="utf-8") as f:
-                return ("md", f.read())
-        return (None, None)
+        if not path_str:
+            return (None, None)
+        path = Path(path_str)
+        try:
+            return (fmt, path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError:
+            return (fmt, path.read_text(encoding="cp949"))
 
+    # @st.dialog("📖 가이드", width="large")
+    # def _load_tutorial_html():
+    #     st.iframe(Path("KCDW_Tutorial.html"), width="stretch",height=600)
     @st.dialog("📖 가이드", width="large")
     def show_tutorial_dialog():
-        fmt, data = _load_tutorial_html()
+        fmt, path_str, mtime_ns = _get_tutorial_file()
+        fmt, data = _load_tutorial_html(fmt, path_str, mtime_ns)
         if fmt == "html":
-            components.html(data, height=750, scrolling=True)
+            st.iframe(data, width="stretch",height=600)
         elif fmt == "md":
             st.markdown(data, unsafe_allow_html=True)
         else:
@@ -453,6 +512,8 @@ elif st.session_state["authentication_status"]:
 
     if _show_guide:
         show_tutorial_dialog()
+        st.session_state["_show_guide_dialog"] = False
+        st.session_state["_guide_reset"] = None
 
     # ── 메인 영역 ─────────────────────────────────────────────────
     df = st.session_state.df
