@@ -22,7 +22,9 @@ def perform_pivot(source_df, index_cols, values_col, agg_func='first',
         if temp_df[col].dtype == 'object':
             temp_df[col] = temp_df[col].fillna("(NULL)").astype(str)
         elif is_datetime64_any_dtype(temp_df[col]):
-            temp_df[col] = temp_df[col].dt.strftime('%Y-%m-%d').fillna("(NULL)").astype(str)
+            has_time = (temp_df[col].dt.hour != 0).any() or (temp_df[col].dt.minute != 0).any() or (temp_df[col].dt.second != 0).any()
+            fmt = '%Y-%m-%d %H:%M:%S' if has_time else '%Y-%m-%d'
+            temp_df[col] = temp_df[col].dt.strftime(fmt).fillna("(NULL)").astype(str)
         else:
             temp_df[col] = temp_df[col].astype(str).replace('nan', '(NULL)')
     if classic_mode:
@@ -31,7 +33,9 @@ def perform_pivot(source_df, index_cols, values_col, agg_func='first',
             if temp_df[columns_col].dtype == 'object':
                 temp_df[columns_col] = temp_df[columns_col].fillna("(NULL)").astype(str)
             elif is_datetime64_any_dtype(temp_df[columns_col]):
-                temp_df[columns_col] = temp_df[columns_col].dt.strftime('%Y-%m-%d').fillna("(NULL)").astype(str)
+                has_time = (temp_df[columns_col].dt.hour != 0).any() or (temp_df[columns_col].dt.minute != 0).any() or (temp_df[columns_col].dt.second != 0).any()
+                fmt = '%Y-%m-%d %H:%M:%S' if has_time else '%Y-%m-%d'
+                temp_df[columns_col] = temp_df[columns_col].dt.strftime(fmt).fillna("(NULL)").astype(str)
             else:
                 temp_df[columns_col] = temp_df[columns_col].astype(str).replace('nan', '(NULL)')
         pivot_col_target = columns_col
@@ -39,7 +43,9 @@ def perform_pivot(source_df, index_cols, values_col, agg_func='first',
         fill_val = "-"
         for val_c in values_col:
             if is_datetime64_any_dtype(temp_df[val_c]):
-                temp_df[val_c] = temp_df[val_c].dt.strftime('%Y-%m-%d %H:%M:%S').fillna("(NULL)").astype(str)
+                has_time = (temp_df[val_c].dt.hour != 0).any() or (temp_df[val_c].dt.minute != 0).any() or (temp_df[val_c].dt.second != 0).any()
+                fmt = '%Y-%m-%d %H:%M:%S' if has_time else '%Y-%m-%d'
+                temp_df[val_c] = temp_df[val_c].dt.strftime(fmt).fillna("(NULL)").astype(str)
         temp_df['__seq__'] = temp_df.groupby(index_cols).cumcount() + 1
         if max_n is not None:
             temp_df = temp_df[temp_df['__seq__'] <= max_n]
@@ -540,7 +546,7 @@ elif st.session_state["authentication_status"]:
         if info["date_candidates"]:
             for col in info["date_candidates"]:
                 st.session_state.dtype_originals[col] = df[col].copy()
-                st.session_state.df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
+                st.session_state.df[col] = pd.to_datetime(df[col], errors='coerce')
                 st.session_state.dtype_overrides[col] = "날짜형 (자동)"
             date_auto_txt = "\n\n   📅 날짜로 자동 변환: " + ", ".join(
                 f"**{c}**" for c in info["date_candidates"])
@@ -1721,7 +1727,7 @@ elif st.session_state["authentication_status"]:
                                     st.session_state.df[col] = df[col].astype("category")
                                 elif "날짜형" in target:
                                     st.session_state.df[col] = pd.to_datetime(
-                                        df[col], errors='coerce').dt.date
+                                        df[col], errors='coerce')
                                 st.session_state.dtype_overrides[col] = target
                             except Exception as e:
                                 st.error(f"❌ {col} 변환 실패: {e}")
