@@ -45,26 +45,22 @@ def check_health():
         write_log(f"헬스체크 실패 (서버 미응답): {e}", "WARNING")
         return {"healthy": False, "memory_mb": 0, "pid": None}
 
-def find_process_by_port(port):
-    """지정된 포트(8502)를 사용 중인 모든 프로세스를 탐색"""
-    target_processes = []
-    for proc in psutil.process_iter(['pid', 'name']):
+def find_uvicorn_processes():
+    """cmdline에 uvicorn과 asgi:app이 포함된 프로세스를 모두 탐색"""
+    uvicorn_processes = []
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
-            try:
-                connections = proc.net_connections(kind='inet')
-            except AttributeError:
-                connections = proc.connections(kind='inet')
-            for conn in connections:
-                if conn.laddr.port == port:
-                    target_processes.append(proc)
-                    break
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            cmdline = proc.info.get('cmdline') or []
+            cmdline_str = " ".join(cmdline).lower()
+            if "uvicorn" in cmdline_str and "asgi:app" in cmdline_str:
+                uvicorn_processes.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
-    return target_processes
+    return uvicorn_processes
 
 def kill_server():
-    """포트 8502를 점유 중인 기존 프로세스를 안전하게 종료"""
-    processes = find_process_by_port(TARGET_PORT)
+    """Uvicorn 서버 프로세스를 안전하게 종료"""
+    processes = find_uvicorn_processes()
     for proc in processes:
         try:
             pid = proc.pid
@@ -80,6 +76,9 @@ def kill_server():
     # 포트 반환 대기
     if processes:
         time.sleep(3)
+
+CONSECUTIVE_FAILURES_LIMIT = 3
+consecutive_failures = 0
 
 def start_server():
     """Uvicorn 서버를 HTTP(8502) 백그라운드 기동"""
@@ -104,25 +103,50 @@ def start_server():
             stderr=subprocess.DEVNULL
         )
         write_log("Uvicorn HTTP 서버 백그라운드 기동 완료", "INFO")
+        # 서버 기동 및 Warm-up 대기 시간 부여 (15초)
+        write_log("서버 초기 기동 및 Warm-up 대기를 위해 15초간 대기합니다...", "INFO")
+        time.sleep(15)
     except Exception as e:
         write_log(f"HTTP 서버 기동 실패: {e}", "ERROR")
 
 def check_and_restart():
-    # 1) /health 엔드포인트로 실제 앱 응답 여부 확인
+    global consecutive_failures
+    
+    # 1) Uvicorn 프로세스가 돌고 있는지 확인
+    processes = find_uvicorn_processes()
+    
+    # 프로세스가 아예 없다면 -> 서버 즉시 시작 (대기 없음)
+    if not processes:
+        write_log("Uvicorn 서버 프로세스가 실행 중이 아닙니다! 즉시 서버를 시작합니다.", "WARNING")
+        start_server()
+        consecutive_failures = 0
+        return
+        
+    # 2) 프로세스가 존재한다면 /health 엔드포인트로 응답 여부 확인
     health = check_health()
     
-    # 2) 서버가 응답하지 않는 경우 -> 기존 프로세스 정리 후 재시작
+    # 3) 서버가 응답하지 않는 경우 -> 누적 실패 횟수 차감 후 한도 초과 시 재시작
     if not health["healthy"]:
-        write_log("서버가 응답하지 않습니다. 기존 프로세스 정리 후 재시작합니다.", "WARNING")
-        kill_server()
-        start_server()
+        consecutive_failures += 1
+        write_log(
+            f"서버가 응답하지 않습니다. (누적 실패: {consecutive_failures}/{CONSECUTIVE_FAILURES_LIMIT})",
+            "WARNING"
+        )
+        if consecutive_failures >= CONSECUTIVE_FAILURES_LIMIT:
+            write_log("누적 헬스체크 실패 임계값을 초과하여 서버를 재시작합니다.", "ALERT")
+            kill_server()
+            start_server()
+            consecutive_failures = 0
         return
 
-    # 3) 메모리가 2GB 임계값을 넘을 때 강제 재시작
+    # 정상 응답 시 실패 횟수 초기화
+    consecutive_failures = 0
+
+    # 4) 메모리가 2GB 임계값을 넘을 때 강제 재시작
     mem_mb = health["memory_mb"]
     if mem_mb > MEMORY_LIMIT_MB:
         write_log(
-            f"메모리 점유량({mem_mb:.2f} MB)이 임계값({MEMORY_LIMIT_MB} MB)을 초과하였습니다.",
+            f"메모리 점유량({mem_mb:.2f} MB)이 임계값({MEMORY_LIMIT_MB} MB)을 초과하였습니다. 서버를 재시작합니다.",
             "WARNING"
         )
         kill_server()

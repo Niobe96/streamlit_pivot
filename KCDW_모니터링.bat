@@ -35,33 +35,30 @@ set LOG_FILE=%SCRIPT_DIR%\로그.txt
 
 echo [%date% %time%] === KCDW 매일 재시작 시작 ===
 
-:: ──────────────────────────────────────────────
-:: STEP 1. 기존 monitor.py 프로세스 종료 ㅋㅌㅊ
-:: ──────────────────────────────────────────────
+:: ----------------------------------------------
+:: STEP 1. 기존 monitor.py 프로세스 종료
+:: ----------------------------------------------
 echo [%date% %time%] 기존 monitor.py 프로세스를 종료합니다...
 wmic process where "name='python.exe' and commandline like '%%monitor.py%%'" call terminate >nul 2>&1
 timeout /t 2 /nobreak >nul
 
-:: ──────────────────────────────────────────────
+:: ----------------------------------------------
 :: STEP 2. 기존 Uvicorn(asgi:app) 서버 프로세스 종료
-:: ──────────────────────────────────────────────
+:: ----------------------------------------------
 echo [%date% %time%] 기존 Uvicorn 서버 프로세스를 종료합니다...
 wmic process where "name='python.exe' and commandline like '%%uvicorn%%asgi:app%%'" call terminate >nul 2>&1
 timeout /t 3 /nobreak >nul
 
-:: ──────────────────────────────────────────────
-:: STEP 3. 로그 파일 날짜별 백업 (기존 로그 보존)
-:: ──────────────────────────────────────────────
-if exist "%LOG_FILE%" (
-    set BACKUP_DATE=%date:~0,4%%date:~5,2%%date:~8,2%
-    echo [%date% %time%] 기존 로그 파일을 백업합니다...
-    copy /Y "%LOG_FILE%" "%SCRIPT_DIR%\로그_%BACKUP_DATE%.txt" >nul 2>&1
-    del "%LOG_FILE%" >nul 2>&1
-)
+:: ----------------------------------------------
+:: STEP 3. 로그 파일 보존 및 재시작 기록 추가
+:: ----------------------------------------------
+echo [%date% %time%] 기존 로그 파일에 재시작 기록을 추가합니다...
+echo. >> "%LOG_FILE%"
+echo [%date% %time%] [INFO] === KCDW 매일 재시작 배치 실행 === >> "%LOG_FILE%"
 
-:: ──────────────────────────────────────────────
+:: ----------------------------------------------
 :: STEP 4. monitor.py 새로 시작 (백그라운드)
-:: ──────────────────────────────────────────────
+:: ----------------------------------------------
 echo [%date% %time%] monitor.py를 새로 시작합니다...
 cd /d "%SCRIPT_DIR%"
 start "" /B /MIN "%PYTHON_EXE%" "%SCRIPT_NAME%"
