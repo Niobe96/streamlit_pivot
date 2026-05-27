@@ -7,30 +7,36 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import Route
 
-# 1. Referer 및 Origin 검증 미들웨어 구현 (방식 1)
+# 1. 포털 토큰 + 세션 쿠키 하이브리드 검증 미들웨어 구현 (우회책)
 class RefererCheckMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        # WebSocket 핸드셰이크 헤더와 HTTP 헤더를 모두 점검
+        # 1) 포털 링크에 덧붙일 약속된 비밀 패스키 (사용자가 변경 가능)
+        SECRET_PASSKEY = "kuh_secret_2026"
+        
+        # 2) 요청 정보 수집 (쿼리 파라미터 및 쿠키)
+        query_params = request.query_params
+        access_key = query_params.get("access_key")
+        cookie_token = request.cookies.get("kcdw_auth_token")
+        
         referer = request.headers.get("referer")
         origin = request.headers.get("origin")
         
-        # [도메인 지정] 포털 도메인(kcdw.kuh.ac.kr)에 맞춤 설정
-        allowed_domain = "kcdw.kuh.ac.kr"
-        
         is_allowed = False
         
-        # 1) 허용된 공식 포털로부터의 유입인지 검증 (도메인이 헤더에 포함되었는지 확인)
-        if referer and allowed_domain in referer:
+        # 3) 검증 로직
+        # A) 포털 링크의 비밀 패스키(쿼리 스트링)가 일치하는 경우
+        if access_key == SECRET_PASSKEY:
             is_allowed = True
-        elif origin and allowed_domain in origin:
+        # B) 이미 이전에 접속에 성공하여 12시간 세션 쿠키가 발급된 브라우저인 경우
+        elif cookie_token == SECRET_PASSKEY:
             is_allowed = True
-        # 2) 현재 방문한 호스트가 localhost 또는 127.0.0.1인 경우 (개발용 직접 접속 허용)
+        # C) 로컬 개발/테스트 접속인 경우
         elif request.url.hostname in ("localhost", "127.0.0.1"):
             is_allowed = True
-        # 3) 경유지(Referer/Origin)에 로컬 호스트 주소가 포함되어 있는 경우
-        elif referer and ("localhost" in referer or "127.0.0.1" in referer):
+        # D) 기존 Referer/Origin 헤더가 살아있어 도메인이 정상 감지되는 경우
+        elif referer and "kcdw.kuh.ac.kr" in referer:
             is_allowed = True
-        elif origin and ("localhost" in origin or "127.0.0.1" in origin):
+        elif origin and "kcdw.kuh.ac.kr" in origin:
             is_allowed = True
             
         # 비인가 직접 접속(주소창 IP:포트 입력 등) 차단
@@ -44,16 +50,17 @@ class RefererCheckMiddleware(BaseHTTPMiddleware):
                 <body style="font-family: Arial, sans-serif; text-align: center; margin-top: 100px; background-color: #f8fafc; color: #0f172a;">
                     <div style="display: inline-block; padding: 40px; background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e2e8f0; max-width: 550px; text-align: left;">
                         <h2 style="color: #ef4444; margin-top: 0; text-align: center;">❌ 비인가 접근 차단 (Access Denied)</h2>
-                        <p style="font-size: 1.1em; color: #334155; text-align: center;">본 시스템은 사내 포털을 통해서만 접속이 가능합니다.</p>
+                        <p style="font-size: 1.1em; color: #334155; text-align: center;">본 시스템은 공식 사내 포털을 통해서만 접속이 가능합니다.</p>
                         <p style="color: #64748b; font-size: 0.9em; margin-bottom: 20px; text-align: center;">주소창에 직접 IP와 포트 번호를 입력하여 접근할 수 없습니다.</p>
                         
                         <div style="background-color: #f1f5f9; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.85em; color: #475569; margin-bottom: 20px; line-height: 1.5;">
                             <div style="font-weight: bold; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; margin-bottom: 8px; font-size: 1.0em; color: #1e293b;">🔧 실시간 디버그 정보</div>
-                            <div>• 설정된 허용 도메인: <span style="color: #2563eb; font-weight: bold;">{allowed_domain}</span></div>
+                            <div>• 감지된 보안 토큰: <span style="color: #2563eb; font-weight: bold;">{access_key or '없음 (직접 접속 시도)'}</span></div>
                             <div>• 감지된 Referer 헤더: <span style="color: #0d9488;">{referer or 'None (헤더 유실됨)'}</span></div>
-                            <div>• 감지된 Origin 헤더: <span style="color: #0d9488;">{origin or 'None (헤더 유실됨)'}</span></div>
                             <div style="color: #e11d48; margin-top: 10px; font-size: 0.93em; border-top: 1px dashed #cbd5e1; padding-top: 8px;">
-                                💡 <b>'None (헤더 유실됨)'인 경우</b>: 포털(HTTPS)에서 분석기(HTTP)로 접속을 넘길 때 브라우저가 보안 정책상 Referer 헤더를 강제로 삭제하여 빈 값으로 보낸 것입니다. 사내 포털의 분석기 링크 태그에 <code>referrerpolicy="no-referrer-when-downgrade"</code> 속성을 반드시 기입해 주셔야 합니다.
+                                💡 <b>우회 해결법 (포털 링크 수정)</b>:<br>
+                                사내 포털에 등록한 분석기 URL 주소 맨 뒤에 아래와 같이 비밀 패스키를 덧붙여서 링크를 수정해 주세요.<br>
+                                <code style="background: #e2e8f0; padding: 2px 4px; border-radius: 4px; display: inline-block; margin-top: 5px; font-weight: bold; color: #0f172a;">http://[분석기서버IP]:8502/?access_key={SECRET_PASSKEY}</code>
                             </div>
                         </div>
                         
@@ -66,7 +73,18 @@ class RefererCheckMiddleware(BaseHTTPMiddleware):
             """
             return HTMLResponse(html_content, status_code=403)
             
-        return await call_next(request)
+        # 4) 요청 통과 처리 및 세션 쿠키 부여
+        response = await call_next(request)
+        if access_key == SECRET_PASSKEY:
+            # 1회 성공 시 브라우저 세션 쿠키 발급 (브라우저 창을 닫으면 즉시 만료되어 최고의 보안 제공)
+            response.set_cookie(
+                key="kcdw_auth_token",
+                value=SECRET_PASSKEY,
+                path="/",
+                httponly=True,
+                samesite="lax"
+            )
+        return response
 
 # 2. 라이프사이클 훅 (Warm-up 기능 포함)
 @asynccontextmanager
