@@ -14,15 +14,15 @@ class RefererCheckMiddleware(BaseHTTPMiddleware):
         referer = request.headers.get("referer")
         origin = request.headers.get("origin")
         
-        # [샘플 URL 지정] 사용자가 원내 인트라넷/포털 도메인으로 교체 가능
-        allowed_origin = "http://portal.kuh.co.kr"
+        # [도메인 지정] 프로토콜(http/https)과 서브도메인을 유연하게 받기 위해 도메인명만 기입
+        allowed_domain = "kcdw.ac.kr"
         
         is_allowed = False
         
-        # 1) 허용된 공식 포털로부터의 유입인지 검증
-        if referer and referer.startswith(allowed_origin):
+        # 1) 허용된 공식 포털로부터의 유입인지 검증 (도메인이 헤더에 포함되었는지 확인)
+        if referer and allowed_domain in referer:
             is_allowed = True
-        elif origin and origin.startswith(allowed_origin):
+        elif origin and allowed_domain in origin:
             is_allowed = True
         # 2) 현재 방문한 호스트가 localhost 또는 127.0.0.1인 경우 (개발용 직접 접속 허용)
         elif request.url.hostname in ("localhost", "127.0.0.1"):
