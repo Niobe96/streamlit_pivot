@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+# pivot.py가 위치한 디렉토리를 파이썬 모듈 검색 경로에 추가하여 stats_functions 임포트 해결
+sys.path.append(str(Path(__file__).resolve().parent))
+
 import streamlit as st
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
@@ -7,7 +12,8 @@ import traceback
 import time
 import streamlit_authenticator as stauth
 import stats_functions as sf
-from pathlib import Path
+import aiosqlite
+import asyncio
 
 # =============================================================================
 # 핵심 로직: perform_pivot (변경 없음)
@@ -181,30 +187,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# 인증
+# 인증 우회 설정 (원내 전용 비인가 유입 차단 미들웨어 사용)
 # =============================================================================
-try:
-    config = st.secrets.to_dict()
-    credentials = config['credentials']
-    cookie_settings = config['cookie']
-except FileNotFoundError:
-    st.error("❌ .streamlit/secrets.toml 파일이 없습니다.")
-    st.stop()
-except KeyError:
-    st.error("❌ secrets.toml 형식 오류.")
-    st.stop()
+if "authentication_status" not in st.session_state:
+    st.session_state["authentication_status"] = True
+if "name" not in st.session_state:
+    st.session_state["name"] = "원내 사용자"
+if "username" not in st.session_state:
+    st.session_state["username"] = "user"
 
-authenticator = stauth.Authenticate(
-    credentials, cookie_settings['name'],
-    cookie_settings['key'], cookie_settings['expiry_days']
-)
-authenticator.login(location='main')
-
-if st.session_state["authentication_status"] is False:
-    st.error('❌ 아이디 또는 비밀번호가 틀렸습니다.')
-elif st.session_state["authentication_status"] is None:
-    st.warning('🔒 로그인이 필요합니다.')
-elif st.session_state["authentication_status"]:
+if st.session_state["authentication_status"]:
 
     # ── 세션 상태 초기화 ──────────────────────────────────────────
     _defaults = {
@@ -474,10 +466,7 @@ elif st.session_state["authentication_status"]:
             st.session_state["_show_guide_dialog"] = True
             st.rerun()
 
-        st.markdown(f"<div style=' margin-bottom: 10px; color: #334155;'>👤 <b>{st.session_state['name']}</b>님</div>", unsafe_allow_html=True)
-        c_empty, c_btn = st.columns([1, 1])
-        with c_btn:
-            authenticator.logout('로그아웃')
+        # st.markdown(f"<div style=' margin-bottom: 10px; color: #334155;'>👤 <b>{st.session_state['name']}</b>님</div>", unsafe_allow_html=True)
 
     # ── 가이드 다이얼로그 (사이드바 밖에서 표시) ──────────────────
     def _get_tutorial_file():
@@ -702,7 +691,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: t검정 ──
         elif p[:2] == ["stats", "ttest"] and len(p) == 4:
             col, group = p[2], p[3]
-            result, summary, fig = sf.test_ttest(df, col, group)
+            with st.spinner("⚖️ 두 그룹 비교(t검정) 분석 실행 중..."):
+                result, summary, fig = asyncio.run(asyncio.to_thread(sf.test_ttest, df, col, group))
             ed = do_export(fig, summary, f"t검정_{col}")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"⚖️ **{group}별 {col}** t검정 결과예요!\n\n{result_txt}",
@@ -712,7 +702,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: ANOVA ──
         elif p[:2] == ["stats", "anova"] and len(p) == 4:
             col, group = p[2], p[3]
-            result, summary, tukey_df, fig = sf.test_anova(df, col, group)
+            with st.spinner("📊 여러 그룹 비교(ANOVA) 분석 실행 중..."):
+                result, summary, tukey_df, fig = asyncio.run(asyncio.to_thread(sf.test_anova, df, col, group))
             
             if "오류" in result:
                 add_bot_msg(f"❌ ANOVA 분석 불가: {result['오류']}", nav=False)
@@ -728,7 +719,8 @@ elif st.session_state["authentication_status"]:
         elif p[:2] == ["stats", "regression"] and len(p) >= 4:
             y_col = p[2]
             x_cols = p[3:]
-            result, coef_df, fig = sf.run_regression(df, x_cols, y_col)
+            with st.spinner("📈 회귀분석 연산 실행 중..."):
+                result, coef_df, fig = asyncio.run(asyncio.to_thread(sf.run_regression, df, x_cols, y_col))
             ed = do_export(fig, coef_df, f"회귀_{y_col}")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"📈 **{y_col}** 회귀분석 결과예요!\n\n{result_txt}",
@@ -738,7 +730,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: 정규성 ──
         elif p[:2] == ["stats", "normality"] and len(p) == 3:
             col = p[2]
-            result = sf.test_normality(df, col)
+            with st.spinner("📐 정규성 검정 연산 실행 중..."):
+                result = asyncio.run(asyncio.to_thread(sf.test_normality, df, col))
             result_df = pd.DataFrame([result])
             ed = do_export(None, result_df, f"정규성_{col}")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
@@ -749,7 +742,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: 그룹 비교 ──
         elif p[:2] == ["stats", "group_compare"] and len(p) == 4:
             col, group = p[2], p[3]
-            summary, fig = sf.compare_groups(df, col, group)
+            with st.spinner("📋 그룹 비교 분석 연산 실행 중..."):
+                summary, fig = asyncio.run(asyncio.to_thread(sf.compare_groups, df, col, group))
             ed = do_export(fig, summary, f"그룹비교_{col}")
             add_bot_msg(f"📋 **{group}별 {col}** 그룹 비교 결과예요!",
                         figure=fig, result_df=summary, export_data=ed)
@@ -814,7 +808,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: 카이제곱 검정 ──
         elif p[:2] == ["stats", "chi2"] and len(p) == 4:
             col1, col2 = p[2], p[3]
-            result, cross = sf.test_chi2(df, col1, col2)
+            with st.spinner("🔀 카이제곱 검정 연산 실행 중..."):
+                result, cross = asyncio.run(asyncio.to_thread(sf.test_chi2, df, col1, col2))
             ed = do_export(None, cross, f"카이제곱_{col1}")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"🔀 **{col1} × {col2}** 카이제곱 검정 결과예요!\n\n{result_txt}",
@@ -824,7 +819,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: 대응표본 t검정 ──
         elif p[:2] == ["stats", "paired"] and len(p) == 4:
             col1, col2 = p[2], p[3]
-            result, summary, fig = sf.test_paired_ttest(df, col1, col2)
+            with st.spinner("🔄 대응표본 t검정 연산 실행 중..."):
+                result, summary, fig = asyncio.run(asyncio.to_thread(sf.test_paired_ttest, df, col1, col2))
             ed = do_export(fig, summary, f"대응t_{col1}")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"🔄 **{col1} vs {col2}** 전후 비교 결과예요!\n\n{result_txt}",
@@ -834,7 +830,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: Kruskal-Wallis ──
         elif p[:2] == ["stats", "kruskal"] and len(p) == 4:
             col, group = p[2], p[3]
-            result, summary, fig = sf.test_kruskal(df, col, group)
+            with st.spinner("📊 Kruskal-Wallis 검정 연산 실행 중..."):
+                result, summary, fig = asyncio.run(asyncio.to_thread(sf.test_kruskal, df, col, group))
             ed = do_export(fig, summary, f"Kruskal_{col}")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"📊 **{group}별 {col}** Kruskal-Wallis 결과예요!\n\n{result_txt}",
@@ -844,7 +841,8 @@ elif st.session_state["authentication_status"]:
         # ── 고급: 비율 검정 ──
         elif p[:2] == ["stats", "proportion"] and len(p) == 4:
             col, group = p[2], p[3]
-            result, summary, fig = sf.test_proportion(df, col, group)
+            with st.spinner("📊 비율 비교 검정 연산 실행 중..."):
+                result, summary, fig = asyncio.run(asyncio.to_thread(sf.test_proportion, df, col, group))
             ed = do_export(fig, summary, f"비율_{col}")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"📊 **{group}별 {col}** 비율 비교 결과예요!\n\n{result_txt}",
@@ -855,7 +853,8 @@ elif st.session_state["authentication_status"]:
         elif p[:2] == ["stats", "logistic"] and len(p) >= 4:
             y_col = p[2]
             x_cols = p[3:]
-            result, coef_df, fig = sf.run_logistic_regression(df, x_cols, y_col)
+            with st.spinner("🎯 로지스틱 회귀 분석 실행 중..."):
+                result, coef_df, fig = asyncio.run(asyncio.to_thread(sf.run_logistic_regression, df, x_cols, y_col))
             if coef_df is None:
                 add_bot_msg(f"❌ {result.get('오류', '오류 발생')}", nav=False)
             else:
@@ -869,7 +868,8 @@ elif st.session_state["authentication_status"]:
         elif p[:2] == ["stats", "survival"] and len(p) >= 4:
             time_col, event_col = p[2], p[3]
             group_col = p[4] if len(p) > 4 else None
-            result, summary_df, fig = sf.run_kaplan_meier(df, time_col, event_col, group_col)
+            with st.spinner("⏱️ Kaplan-Meier 생존분석 실행 중..."):
+                result, summary_df, fig = asyncio.run(asyncio.to_thread(sf.run_kaplan_meier, df, time_col, event_col, group_col))
             ed = do_export(fig, summary_df, "생존분석")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"⏱️ Kaplan-Meier 생존분석 결과예요!\n\n{result_txt}",
@@ -880,7 +880,8 @@ elif st.session_state["authentication_status"]:
         elif p[:2] == ["stats", "cox"] and len(p) >= 5:
             time_col, event_col = p[2], p[3]
             x_cols = p[4:]
-            result, coef_df, fig = sf.run_cox_regression(df, time_col, event_col, x_cols)
+            with st.spinner("📉 Cox 비례위험 회귀분석 실행 중..."):
+                result, coef_df, fig = asyncio.run(asyncio.to_thread(sf.run_cox_regression, df, time_col, event_col, x_cols))
             ed = do_export(fig, coef_df, "Cox회귀")
             result_txt = "\n\n".join([f"**{k}**: {v}" for k, v in result.items()])
             add_bot_msg(f"📉 Cox 비례위험 모델 결과예요!\n\n{result_txt}",
@@ -1475,12 +1476,13 @@ elif st.session_state["authentication_status"]:
                                         ascending=[True]*len(index_sel) + [ascending]
                                     ).reset_index(drop=True)
 
-                                result_df = perform_pivot(
+                                result_df = asyncio.run(asyncio.to_thread(
+                                    perform_pivot,
                                     pivot_source, index_sel, values_sel,
                                     agg_func='first', sort_by_seq=interleave,
                                     classic_mode=False,
                                     interleave_groups=interleave_groups
-                                )
+                                ))
                                 buf = io.BytesIO()
                                 with pd.ExcelWriter(buf, engine='openpyxl') as w:
                                     result_df.reset_index().to_excel(w, sheet_name='Result', index=False)
@@ -1538,8 +1540,10 @@ elif st.session_state["authentication_status"]:
                             pivot_source = pivot_source.sort_values(
                                 by=[sort_col], ascending=ascending
                             ).reset_index(drop=True)
-                        result_df = perform_pivot(pivot_source, index_sel, val_sel, agg_func=agg,
-                                                   classic_mode=True, columns_col=col_sel)
+                        result_df = asyncio.run(asyncio.to_thread(
+                            perform_pivot, pivot_source, index_sel, val_sel, agg_func=agg,
+                            classic_mode=True, columns_col=col_sel
+                        ))
                         buf = io.BytesIO()
                         with pd.ExcelWriter(buf, engine='openpyxl') as w:
                             result_df.reset_index().to_excel(w, sheet_name='Result', index=False)
