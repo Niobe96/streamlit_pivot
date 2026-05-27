@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 import io, re
@@ -1574,52 +1573,53 @@ elif st.session_state["authentication_status"]:
                 )
 
             if config_step == 1:
-                c1, c2 = st.columns(2)
-                with c1:
-                    pid_idx = all_cols.index(st.session_state.patient_id_col) if st.session_state.patient_id_col in all_cols else 0
-                    pid = st.selectbox("🆔 환자 ID 컬럼", all_cols, index=pid_idx,
-                                       help="개인 식별자 (분석에서 제외됨)", key="cfg_pid")
-                    st.session_state.patient_id_col = pid if pid else None
-                with c2:
-                    dep_idx = all_cols.index(st.session_state.dependent_var_col) if st.session_state.dependent_var_col in all_cols else 0
-                    dep = st.selectbox("🎯 종속변수 컬럼", all_cols, index=dep_idx,
-                                       help="분석의 목표 변수", key="cfg_dep")
-                    st.session_state.dependent_var_col = dep if dep else None
+                with st.bottom:
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        pid_idx = all_cols.index(st.session_state.patient_id_col) if st.session_state.patient_id_col in all_cols else 0
+                        pid = st.selectbox("🆔 환자 ID 컬럼", all_cols, index=pid_idx,
+                                           help="개인 식별자 (분석에서 제외됨)", key="cfg_pid")
+                        st.session_state.patient_id_col = pid if pid else None
+                    with c2:
+                        dep_idx = all_cols.index(st.session_state.dependent_var_col) if st.session_state.dependent_var_col in all_cols else 0
+                        dep = st.selectbox("🎯 종속변수 컬럼", all_cols, index=dep_idx,
+                                           help="분석의 목표 변수", key="cfg_dep")
+                        st.session_state.dependent_var_col = dep if dep else None
 
-                # 종속변수 범주형 변환 옵션
-                dep = st.session_state.dependent_var_col
-                if dep and dep in df.columns and pd.api.types.is_numeric_dtype(df[dep]):
-                    unique_n = df[dep].nunique()
-                    st.caption(f"ℹ️ **{dep}**는 수치형 (고유값 {unique_n}개)")
-                    convert = st.checkbox(
-                        f"🔄 '{dep}'을 범주형으로 변환 (예: 0/1 코드)",
-                        value=st.session_state.dep_var_as_cat,
-                        key="cfg_dep_cat")
-                    st.session_state.dep_var_as_cat = convert
-                    if convert and df[dep].dtype != "object":
-                        st.session_state.df[dep] = df[dep].astype(str)
-                    elif not convert and df[dep].dtype == "object":
-                        try:
-                            st.session_state.df[dep] = pd.to_numeric(df[dep])
-                        except ValueError:
-                            pass
-                elif dep and dep in df.columns:
-                    st.caption(f"ℹ️ **{dep}**는 범주형 (고유값 {df[dep].nunique()}개)")
-
-                c_skip, c_next = st.columns(2)
-                if c_skip.button("⏭️ 건너뛰기", width="stretch", key="cfg_skip1"):
-                    st.session_state.config_step = 2
-                    st.rerun()
-                if c_next.button("✅ 다음 단계로", type="primary",
-                                  width='stretch', key="cfg_next1"):
-                    pid = st.session_state.patient_id_col
+                    # 종속변수 범주형 변환 옵션
                     dep = st.session_state.dependent_var_col
-                    add_user_msg("데이터 설정 완료")
-                    add_bot_msg(f"환자 ID: **{pid or '미설정'}** / "
-                               f"종속변수: **{dep or '미설정'}** 으로 설정했어요! 👍",
-                               nav=False)
-                    st.session_state.config_step = 2
-                    st.rerun()
+                    if dep and dep in df.columns and pd.api.types.is_numeric_dtype(df[dep]):
+                        unique_n = df[dep].nunique()
+                        st.caption(f"ℹ️ **{dep}**는 수치형 (고유값 {unique_n}개)")
+                        convert = st.checkbox(
+                            f"🔄 '{dep}'을 범주형으로 변환 (예: 0/1 코드)",
+                            value=st.session_state.dep_var_as_cat,
+                            key="cfg_dep_cat")
+                        st.session_state.dep_var_as_cat = convert
+                        if convert and df[dep].dtype != "object":
+                            st.session_state.df[dep] = df[dep].astype(str)
+                        elif not convert and df[dep].dtype == "object":
+                            try:
+                                st.session_state.df[dep] = pd.to_numeric(df[dep])
+                            except ValueError:
+                                pass
+                    elif dep and dep in df.columns:
+                        st.caption(f"ℹ️ **{dep}**는 범주형 (고유값 {df[dep].nunique()}개)")
+
+                    c_skip, c_next = st.columns(2)
+                    if c_skip.button("⏭️ 건너뛰기", width="stretch", key="cfg_skip1"):
+                        st.session_state.config_step = 2
+                        st.rerun()
+                    if c_next.button("✅ 다음 단계로", type="primary",
+                                      width='stretch', key="cfg_next1"):
+                        pid = st.session_state.patient_id_col
+                        dep = st.session_state.dependent_var_col
+                        add_user_msg("데이터 설정 완료")
+                        add_bot_msg(f"환자 ID: **{pid or '미설정'}** / "
+                                   f"종속변수: **{dep or '미설정'}** 으로 설정했어요! 👍",
+                                   nav=False)
+                        st.session_state.config_step = 2
+                        st.rerun()
 
         # ═══ Step 2: 데이터 타입 확인 · 변환 ═══
         if config_step >= 2:
@@ -1750,19 +1750,20 @@ elif st.session_state["authentication_status"]:
                                 st.rerun()
 
                 # 완료 버튼
-                c_skip2, c_done = st.columns(2)
-                if c_skip2.button("⏭️ 건너뛰기", width='stretch',
-                                   key="cfg_skip2"):
-                    st.session_state.data_configured = True
-                    st.session_state.config_step = 3
-                    add_bot_msg("설정을 완료했어요! 어떤 분석을 해볼까요? 😊", nav=False)
-                    st.rerun()
-                if c_done.button("✅ 설정 완료 → 분석 시작!", type="primary",
-                                  width='stretch', key="cfg_done"):
-                    st.session_state.data_configured = True
-                    st.session_state.config_step = 3
-                    add_bot_msg("모든 설정이 완료됐어요! 🎉 어떤 분석을 해볼까요?", nav=False)
-                    st.rerun()
+                with st.bottom:
+                    c_skip2, c_done = st.columns(2)
+                    if c_skip2.button("⏭️ 건너뛰기", width='stretch',
+                                       key="cfg_skip2"):
+                        st.session_state.data_configured = True
+                        st.session_state.config_step = 3
+                        add_bot_msg("설정을 완료했어요! 어떤 분석을 해볼까요? 😊", nav=False)
+                        st.rerun()
+                    if c_done.button("✅ 설정 완료 → 분석 시작!", type="primary",
+                                      width='stretch', key="cfg_done"):
+                        st.session_state.data_configured = True
+                        st.session_state.config_step = 3
+                        add_bot_msg("모든 설정이 완료됐어요! 🎉 어떤 분석을 해볼까요?", nav=False)
+                        st.rerun()
 
     # ── 메인 영역 렌더링 분기 ─────────────────────────────────────
     if df is None:
@@ -1770,23 +1771,21 @@ elif st.session_state["authentication_status"]:
     elif not st.session_state.data_configured:
         render_config_steps()
     else:
-        render_level()
-        # 하단 네비게이션:
-        # - 분석 완료 후 tree_step==1 (같은 섹션 Level 2 보여주는 중)
-        #   일 때만 표시 → "다른 분석 해줘"는 Level 1(최상위)로 복귀
-        if (st.session_state.result_section is not None
-                and st.session_state.tree_step == 1):
-            st.divider()
-            if st.button("🏠 홈으로 가기", width="stretch", key="nav_home_bottom"):
-                add_user_msg("홈으로 가기")
-                add_bot_msg("처음으로 돌아왔어요! 어떤 분석을 해볼까요? 😊", nav=False)
-                reset_tree()  # 완전 리셋 → Level 0 (최상위 선택)
-                st.rerun()
+        with st.bottom:
+            render_level()
+            # 하단 네비게이션:
+            # - 분석 완료 후 tree_step==1 (같은 섹션 Level 2 보여주는 중)
+            #   일 때만 표시 → "다른 분석 해줘"는 Level 1(최상위)로 복귀
+            if (st.session_state.result_section is not None
+                    and st.session_state.tree_step == 1):
+                # st.divider()
+                if st.button("🏠 홈으로 가기", width="stretch", key="nav_home_bottom"):
+                    add_user_msg("홈으로 가기")
+                    add_bot_msg("처음으로 돌아왔어요! 어떤 분석을 해볼까요? 😊", nav=False)
+                    reset_tree()  # 완전 리셋 → Level 0 (최상위 선택)
+                    st.rerun()
 
-    # ── 자동 스크롤 로직 (Anchor 기반) ──────────────────────────────────
-    # 화면 맨 아래에 도착 지점(Anchor) 생성
-    st.markdown('<div id="bottom_anchor" style="height: 50px;"></div>', unsafe_allow_html=True)
-
+    # ── 자동 스크롤 로직 ──────────────────────────────────────────────
     if "last_msg_count" not in st.session_state:
         st.session_state.last_msg_count = len(st.session_state.chat_history)
         
@@ -1796,12 +1795,26 @@ elif st.session_state["authentication_status"]:
     if current_msg_count > st.session_state.last_msg_count:
         js_scroll = """
         <script>
-            // 부모 창(Streamlit 메인 화면)에서 bottom_anchor 아이디를 찾음
-            const bottom = window.parent.document.getElementById("bottom_anchor");
-            if (bottom) {
-                bottom.scrollIntoView({behavior: "smooth", block: "end"});
-            }
+            setTimeout(function() {
+                var doc = window.parent.document || document;
+                // Streamlit 메인 스크롤 컨테이너를 찾아 맨 아래로 스크롤
+                var selectors = [
+                    'section.stMain',
+                    '[data-testid="stMain"]',
+                    '.main',
+                    '[data-testid="stAppViewContainer"]'
+                ];
+                for (var i = 0; i < selectors.length; i++) {
+                    var el = doc.querySelector(selectors[i]);
+                    if (el && el.scrollHeight > el.clientHeight) {
+                        el.scrollTo({top: el.scrollHeight, behavior: 'smooth'});
+                        return;
+                    }
+                }
+                // 폴백: 부모 윈도우 전체 스크롤
+                window.parent.scrollTo({top: doc.body.scrollHeight, behavior: 'smooth'});
+            }, 150);
         </script>
         """
-        components.html(js_scroll, height=0)
+        st.html(js_scroll, unsafe_allow_javascript=True)
         st.session_state.last_msg_count = current_msg_count
