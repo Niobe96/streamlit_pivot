@@ -46,13 +46,13 @@ def check_health():
         return {"healthy": False, "memory_mb": 0, "pid": None}
 
 def find_uvicorn_processes():
-    """cmdline에 uvicorn과 asgi:app이 포함된 프로세스를 모두 탐색"""
+    """cmdline에 uvicorn, asgi:app, 그리고 해당 TARGET_PORT가 포함된 프로세스를 모두 탐색"""
     uvicorn_processes = []
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = proc.info.get('cmdline') or []
             cmdline_str = " ".join(cmdline).lower()
-            if "uvicorn" in cmdline_str and "asgi:app" in cmdline_str:
+            if "uvicorn" in cmdline_str and "asgi:app" in cmdline_str and f"--port {TARGET_PORT}" in cmdline_str:
                 uvicorn_processes.append(proc)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
